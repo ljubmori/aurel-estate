@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Sitemap: https://aurel-estate-demo.ljubomir993.chatgpt.site/sitemap.xml

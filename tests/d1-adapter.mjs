@@ -1,0 +1,2 @@
+import{DatabaseSync}from'node:sqlite';
+export function sqliteAdapter(path=':memory:'){const sql=new DatabaseSync(path);return {sql,prepare(query){let args=[];return{bind(...values){args=values;return this},async first(){return sql.prepare(query).get(...args)||null},async all(){return{results:sql.prepare(query).all(...args)}},async run(){return sql.prepare(query).run(...args)}}},async batch(statements){return Promise.all(statements.map(s=>s.run()))}}}

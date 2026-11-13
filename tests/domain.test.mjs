@@ -1,0 +1,9 @@
+import test from 'node:test';import assert from 'node:assert/strict';import{filterProperties,safeTour,validateImage,money,viewingPayload}from'../src/domain.mjs';
+const rows=[{id:1,status:'published',price:200,bedrooms:3,area:120,type:'House',transaction:'sale',country:'Serbia',city:'Belgrade',created_at:'2026-01-01'},{id:2,status:'draft',price:100,city:'London'},{id:3,status:'sold',price:80,city:'Belgrade'},{id:4,status:'published',price:300,bedrooms:1,area:60,type:'Apartment',transaction:'rent',country:'UK',city:'London',created_at:'2026-02-01'}];
+test('public catalog excludes drafts and sold properties',()=>assert.deepEqual(filterProperties(rows).map(x=>x.id),[4,1]));
+test('combined filters and inclusive price bounds',()=>assert.deepEqual(filterProperties(rows,{city:'BEL',transaction:'sale',type:'House',country:'Serbia',minPrice:'200',maxPrice:'200',beds:'2',minArea:'100',maxArea:'130'}).map(x=>x.id),[1]));
+test('price order and empty results',()=>{assert.deepEqual(filterProperties(rows,{sort:'price-asc'}).map(x=>x.id),[1,4]);assert.equal(filterProperties(rows,{beds:'7'}).length,0)});
+test('only HTTPS tour URLs',()=>{assert.equal(safeTour('javascript:alert(1)'),null);assert.equal(safeTour('http://example.com'),null);assert.equal(safeTour('https://example.com'),'https://example.com/')});
+test('image validation rejects active and oversized files',()=>{assert.ok(validateImage({type:'image/svg+xml',size:10}));assert.ok(validateImage({type:'image/jpeg',size:11000000}));assert.equal(validateImage({type:'image/webp',size:100}),null)});
+test('formatting never mutates source price',()=>{const p={price:2400,currency:'EUR'};money(p,'sr');assert.deepEqual(p,{price:2400,currency:'EUR'})});
+test('viewing requests cannot self confirm',()=>assert.equal(viewingPayload({status:'confirmed_by_agency'}).status,'new'));
