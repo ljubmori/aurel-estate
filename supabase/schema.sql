@@ -37,3 +37,10 @@ create policy media_update on storage.objects for update to authenticated using(
 create policy media_delete on storage.objects for delete to authenticated using(bucket_id='property-media' and public.is_agency_admin(((storage.foldername(name))[1])::uuid));
 -- Administrators are granted ONLY by project owner via SQL; never by public signup.
 
+
+revoke all on public.agencies, public.agency_members, public.properties, public.agents, public.inquiries from anon, authenticated;
+grant select on public.agencies, public.agents, public.properties to anon, authenticated;
+grant insert on public.inquiries to anon, authenticated;
+grant select on public.agency_members, public.inquiries to authenticated;
+grant update on public.agencies, public.inquiries to authenticated;
+grant insert, update, delete on public.agents, public.properties to authenticated;
