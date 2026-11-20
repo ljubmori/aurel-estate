@@ -3,6 +3,7 @@ export default {async fetch(request){
   const url=new URL(request.url);
   if(request.method!=='GET'&&request.method!=='HEAD')return reply('Method not allowed',405);
   const path=url.pathname;
+  if(path.startsWith('/api/')||path.startsWith('/media/'))return reply('Not found',404);
   const file=ASSETS[path]||(!path.includes('.')?ASSETS['/index.html']:null);
   if(!file)return reply('Not found',404);
   const bytes=Uint8Array.from(atob(file.body),c=>c.charCodeAt(0));
