@@ -26,10 +26,10 @@ returns boolean language sql stable security definer set search_path=public,auth
   select public.has_agency_role(a, array['owner','admin'])
 $$;
 create or replace function public.is_agency_owner(a uuid)
-returns boolean language sql stable security definer set search_path=public,auth as $
+returns boolean language sql stable security definer set search_path=public,auth as $$
   select exists(select 1 from public.agency_members m
     where m.agency_id=a and m.user_id=auth.uid() and m.is_active and m.role='owner')
-$;
+$$;
 revoke all on function public.is_agency_owner(uuid) from public;
 grant execute on function public.is_agency_owner(uuid) to authenticated;
 
@@ -78,7 +78,7 @@ returns boolean language sql stable security definer set search_path=public,auth
         )
       )
   )
-$;
+$$;
 revoke all on function public.can_manage_property(uuid,uuid,uuid) from public;
 grant execute on function public.can_manage_property(uuid,uuid,uuid) to authenticated;
 
