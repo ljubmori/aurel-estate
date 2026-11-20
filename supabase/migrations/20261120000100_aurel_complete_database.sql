@@ -582,6 +582,25 @@ begin
   values(a,auth.uid(),lower(tg_op),tg_table_name,rid,oldj,newj);
   if tg_op='DELETE' then return old; else return new; end if;
 end $$;
+create or replace function public.write_membership_audit_log()
+returns trigger language plpgsql security definer set search_path=public,auth as $$
+declare a uuid; member_user uuid; oldj jsonb; newj jsonb;
+begin
+  if tg_op='DELETE' then
+    a=old.agency_id; member_user=old.user_id; oldj=to_jsonb(old); newj=null;
+  elsif tg_op='UPDATE' then
+    a=new.agency_id; member_user=new.user_id; oldj=to_jsonb(old); newj=to_jsonb(new);
+  else
+    a=new.agency_id; member_user=new.user_id; oldj=null; newj=to_jsonb(new);
+  end if;
+  insert into public.audit_logs(agency_id,actor_user_id,action,entity_type,entity_id,old_values,new_values)
+  values(a,auth.uid(),lower(tg_op),'agency_members',member_user::text,oldj,newj);
+  if tg_op='DELETE' then return old; else return new; end if;
+end $$;
+drop trigger if exists audit_agency_members on public.agency_members;
+create trigger audit_agency_members after insert or update or delete on public.agency_members
+for each row execute function public.write_membership_audit_log();
+
 drop trigger if exists audit_properties on public.properties;
 create trigger audit_properties after insert or update or delete on public.properties for each row execute function public.write_audit_log();
 drop trigger if exists audit_agents on public.agents;
