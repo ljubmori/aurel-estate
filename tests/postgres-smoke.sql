@@ -54,14 +54,39 @@ values ('00000000-0000-4000-8000-000000000001','Agent test property','agent-test
  'Apartment','sale','draft','Serbia','Novi Sad',100000,'EUR',50)
 returning id as agent_property_id \gset
 update public.properties set price=105000 where id=:'agent_property_id';
-do $$ begin
+insert into public.properties(agency_id,title,slug,type,transaction,status,country,city,price,currency,area)
+values ('00000000-0000-4000-8000-000000000001','Agent publication request','agent-publication-request',
+ 'Apartment','sale','published','Serbia','Belgrade',150000,'EUR',60);
+do $ begin
   if (select count(*) from public.properties) < 2 then
     raise exception 'Agent cannot see all agency properties';
   end if;
-end $$;
+  if (select status from public.properties where slug='agent-publication-request') <> 'pending' then
+    raise exception 'Agent bypassed the default publication approval rule';
+  end if;
+end $;
 reset role;
 
-do $$ begin
+-- The agency owner can change the role-level publication rule.
+update public.site_settings
+set publication_rules='{"owner":true,"admin":true,"agent":true,"collaborator":false}'::jsonb
+where agency_id='00000000-0000-4000-8000-000000000001';
+set role authenticated;
+set request.jwt.claim.sub='10000000-0000-4000-8000-000000000002';
+insert into public.properties(agency_id,title,slug,type,transaction,status,country,city,price,currency,area)
+values ('00000000-0000-4000-8000-000000000001','Agent approved publisher','agent-approved-publisher',
+ 'Apartment','sale','published','Serbia','Belgrade',175000,'EUR',65);
+reset role;
+update public.site_settings
+set publication_rules='{"owner":true,"admin":true,"agent":false,"collaborator":false}'::jsonb
+where agency_id='00000000-0000-4000-8000-000000000001';
+do $ begin
+  if (select status from public.properties where slug='agent-approved-publisher') <> 'published' then
+    raise exception 'Agency role-level publication permission did not take effect';
+  end if;
+end $;
+
+do $ begin
   if not exists(select 1 from public.properties where slug='agent-test-property' and created_by='10000000-0000-4000-8000-000000000002') then
     raise exception 'Agent-created listing creator attribution failed';
   end if;
