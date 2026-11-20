@@ -42,7 +42,7 @@ set role='owner', data_scope='all', is_active=true;
 
 Find the Auth user UUID in Supabase Authentication → Users. Do not use the email address as the user ID.
 
-For an existing Supabase project, take a database backup first, then apply the new migration. It adds tables and columns and migrates current property images and English/Serbian listing copy into the new media and translation tables. Review the SQL and confirm the target project before applying it.
+For an existing AUREL installation, first confirm that `supabase/schema.sql` and `supabase/seed.sql` have already been applied to that same Supabase project. This migration is not a standalone bootstrap for an empty or unrelated database. Take a verified backup, review the target project reference, then apply the migration. It adds tables and columns and migrates existing property images and English/Serbian listing copy into normalized media and translation records. Do not apply the demo seed to a production agency without reviewing its sample content.
 
 ## Database model included in the migration
 
@@ -75,6 +75,8 @@ npm install
 npm run build
 npm test
 ```
+
+GitHub Actions additionally starts a clean PostgreSQL 16 instance, applies the base schema, demo seed and complete migration, applies the migration a second time to check rerun safety, then exercises public RLS, owner/agent access, inquiry-to-CRM linking, viewing-request creation, price history and last-owner protection.
 
 The edge Worker is only a static asset handler for the frontend. It does not accept API writes and has no D1 or R2 dependency. All application data requests go directly to Supabase under RLS.
 
