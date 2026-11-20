@@ -222,6 +222,11 @@ drop trigger if exists properties_price_history on public.properties;
 create trigger properties_price_history before insert or update on public.properties
 for each row execute function public.record_property_price_change();
 
+insert into public.property_price_history(agency_id,property_id,price,currency,price_format,price_on_request,valid_from)
+select p.agency_id,p.id,p.price,p.currency,p.price_format,coalesce(p.price_on_request,false),coalesce(p.created_at,now())
+from public.properties p
+where not exists(select 1 from public.property_price_history h where h.property_id=p.id);
+
 -- Central media library: photos, video, floor plans and 3D tours.
 create table if not exists public.property_media (
   id uuid primary key default gen_random_uuid(),
