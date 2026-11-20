@@ -104,7 +104,7 @@ begin
     end if;
   end if;
   return new;
-end $;
+end $$;
 drop trigger if exists properties_protect_assignment on public.properties;
 create trigger properties_protect_assignment before insert or update on public.properties
 for each row execute function public.protect_property_assignment();
@@ -154,7 +154,7 @@ do $ begin
     alter table public.properties add constraint properties_category_agency_fk
       foreign key(category_id,agency_id) references public.property_categories(id,agency_id) on delete set null (category_id);
   end if;
-end $;
+end $$;
 
 update public.properties set offer_type = case
   when transaction='rent' and lower(type)='commercial' then 'commercial_lease'
@@ -218,25 +218,25 @@ do $ begin
     alter table public.properties add constraint properties_project_fk foreign key(development_project_id,agency_id)
       references public.development_projects(id,agency_id) on delete set null (development_project_id);
   end if;
-end $;
+end $$;
 do $ begin
   if not exists(select 1 from pg_constraint where conname='properties_building_fk' and conrelid='public.properties'::regclass) then
     alter table public.properties add constraint properties_building_fk foreign key(building_id,agency_id)
       references public.development_buildings(id,agency_id) on delete set null (building_id);
   end if;
-end $;
+end $$;
 do $ begin
   if not exists(select 1 from pg_constraint where conname='properties_unit_fk' and conrelid='public.properties'::regclass) then
     alter table public.properties add constraint properties_unit_fk foreign key(development_unit_id,agency_id)
       references public.development_units(id,agency_id) on delete set null (development_unit_id);
   end if;
-end $;
+end $$;
 do $ begin
   if not exists(select 1 from pg_constraint where conname='development_units_property_fk' and conrelid='public.development_units'::regclass) then
     alter table public.development_units add constraint development_units_property_fk foreign key(property_id,agency_id)
       references public.properties(id,agency_id) on delete set null (property_id);
   end if;
-end $;
+end $$;
 
 -- Immutable price history, including initial price and every price/currency change.
 create table if not exists public.property_price_history (
@@ -336,7 +336,7 @@ begin
   do update set storage_path=excluded.storage_path,alt_text=excluded.alt_text,
     sort_order=excluded.sort_order,is_cover=excluded.is_cover;
   return new;
-end $;
+end $$;
 drop trigger if exists properties_sync_gallery on public.properties;
 create trigger properties_sync_gallery after insert or update of images on public.properties
 for each row execute function public.sync_property_media_from_gallery();
@@ -430,7 +430,7 @@ begin
     new.client_id=client_uuid;
   end if;
   return new;
-end $;
+end $$;
 drop trigger if exists inquiries_link_client on public.inquiries;
 create trigger inquiries_link_client before insert on public.inquiries
 for each row execute function public.link_inquiry_to_client();
@@ -460,7 +460,7 @@ begin
   do update set client_id=excluded.client_id,property_id=excluded.property_id,
     requested_start=excluded.requested_start,status=excluded.status,updated_at=now();
   return new;
-end $;
+end $$;
 drop trigger if exists inquiries_sync_viewing_request on public.inquiries;
 create trigger inquiries_sync_viewing_request after insert or update of status,preferred_date,preferred_time,property_id
 on public.inquiries for each row execute function public.sync_viewing_request_from_inquiry();
