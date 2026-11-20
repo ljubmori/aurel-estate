@@ -25,6 +25,14 @@ create or replace function public.is_agency_admin(a uuid)
 returns boolean language sql stable security definer set search_path=public,auth as $$
   select public.has_agency_role(a, array['owner','admin'])
 $$;
+create or replace function public.is_agency_owner(a uuid)
+returns boolean language sql stable security definer set search_path=public,auth as $
+  select exists(select 1 from public.agency_members m
+    where m.agency_id=a and m.user_id=auth.uid() and m.is_active and m.role='owner')
+$;
+revoke all on function public.is_agency_owner(uuid) from public;
+grant execute on function public.is_agency_owner(uuid) to authenticated;
+
 create or replace function public.can_manage_property(a uuid, property_agent uuid)
 returns boolean language sql stable security definer set search_path=public,auth as $$
   select exists (
@@ -369,6 +377,24 @@ begin
     execute format('alter table public.%I enable row level security',t);
   end loop;
 end $$;
+
+create policy properties_staff_read on public.properties for select to authenticated
+  using(public.can_manage_property(agency_id,assigned_to));
+create policy properties_staff_write on public.properties for all to authenticated
+  using(public.can_manage_property(agency_id,assigned_to))
+  with check(public.can_manage_property(agency_id,assigned_to));
+
+-- Admins can see the team; only an owner can change memberships/roles.
+create policy membership_admin_read on public.agency_members for select to authenticated
+  using(public.is_agency_admin(agency_id));
+create policy membership_owner_manage on public.agency_members for all to authenticated
+  using(public.is_agency_owner(agency_id))
+  with check(public.is_agency_owner(agency_id));
+
+create policy inquiries_staff_read on public.inquiries for select to authenticated
+  using(assigned_to=auth.uid() and public.has_agency_role(agency_id,array['agent']));
+create policy inquiries_staff_update on public.inquiries for update to authenticated
+  using(assigned_to=auth.uid() and public.has_agency_role(agency_id,array['agent']));
 
 create policy categories_public_read on public.property_categories for select to anon,authenticated using(is_active or public.is_agency_admin(agency_id));
 create policy categories_admin_write on public.property_categories for all to authenticated using(public.is_agency_admin(agency_id)) with check(public.is_agency_admin(agency_id));
