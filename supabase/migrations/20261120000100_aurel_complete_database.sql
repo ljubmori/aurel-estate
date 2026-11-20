@@ -77,7 +77,7 @@ returns boolean language sql stable security definer set search_path=public,auth
       )
   )
 $$;
-revoke all on function public.can_manage_property(uuid,uuid) from public;
+drop function if exists public.can_manage_property(uuid,uuid);
 revoke all on function public.can_manage_property(uuid,uuid,uuid) from public;
 grant execute on function public.can_manage_property(uuid,uuid,uuid) to authenticated;
 
