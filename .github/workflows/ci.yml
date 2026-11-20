@@ -7,6 +7,19 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: aurel
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d aurel"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -16,3 +29,18 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+      - name: Bootstrap Supabase-compatible PostgreSQL test environment
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U postgres -d aurel -v ON_ERROR_STOP=1 -f tests/postgres-bootstrap.sql
+      - name: Apply base schema, demo seed and complete database migration
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d aurel -v ON_ERROR_STOP=1 -f supabase/schema.sql
+          psql -h localhost -U postgres -d aurel -v ON_ERROR_STOP=1 -f supabase/seed.sql
+          psql -h localhost -U postgres -d aurel -v ON_ERROR_STOP=1 -f supabase/migrations/20261120000100_aurel_complete_database.sql
+      - name: Verify RLS, authentication roles, inquiry CRM, viewing requests and price history
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U postgres -d aurel -v ON_ERROR_STOP=1 -f tests/postgres-smoke.sql
