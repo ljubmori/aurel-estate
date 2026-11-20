@@ -10,6 +10,7 @@ alter table public.agency_members add column if not exists permissions jsonb not
 alter table public.agency_members add column if not exists data_scope text not null default 'assigned'
   check (data_scope in ('own','assigned','all'));
 alter table public.agency_members add column if not exists is_active boolean not null default true;
+alter table public.agency_members add column if not exists can_publish boolean;
 alter table public.agency_members add column if not exists invited_at timestamptz;
 alter table public.agency_members add column if not exists joined_at timestamptz default now();
 
@@ -486,10 +487,44 @@ create table if not exists public.site_settings (
   contact_settings jsonb not null default '{}'::jsonb,
   design_settings jsonb not null default '{}'::jsonb,
   seo_settings jsonb not null default '{}'::jsonb,
+  publication_rules jsonb not null default '{"owner":true,"admin":true,"agent":false,"collaborator":false}'::jsonb,
   updated_at timestamptz not null default now()
 );
 insert into public.site_settings(agency_id,contact_settings)
 select id,settings from public.agencies on conflict(agency_id) do nothing;
+alter table public.site_settings add column if not exists publication_rules jsonb not null
+  default '{"owner":true,"admin":true,"agent":false,"collaborator":false}'::jsonb;
+
+create or replace function public.can_publish_property(a uuid)
+returns boolean language sql stable security definer set search_path=public,auth as $
+  select exists(
+    select 1 from public.agency_members m
+    left join public.site_settings s on s.agency_id=m.agency_id
+    where m.agency_id=a and m.user_id=auth.uid() and m.is_active
+      and (
+        m.role in ('owner','admin')
+        or coalesce(m.can_publish,(s.publication_rules->>m.role)::boolean,false)
+      )
+  )
+$;
+revoke all on function public.can_publish_property(uuid) from public;
+grant execute on function public.can_publish_property(uuid) to authenticated;
+
+create or replace function public.enforce_property_publication_approval()
+returns trigger language plpgsql security definer set search_path=public,auth as $
+begin
+  if new.status='published' and not public.can_publish_property(new.agency_id) then
+    new.status='pending';
+    new.published_at=null;
+  elsif new.status='published' and (tg_op='INSERT' or old.status is distinct from 'published') then
+    new.published_at=coalesce(new.published_at,now());
+  end if;
+  return new;
+end $;
+drop trigger if exists properties_publication_guard on public.properties;
+create trigger properties_publication_guard before insert or update of status on public.properties
+for each row execute function public.enforce_property_publication_approval();
+
 create table if not exists public.site_pages (
   id uuid primary key default gen_random_uuid(),
   agency_id uuid not null references public.agencies(id) on delete cascade,
