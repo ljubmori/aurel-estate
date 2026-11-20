@@ -308,6 +308,37 @@ with ordinality as imgs(x,ord)
 where coalesce(x->>'url','')<>''
 and not exists(select 1 from public.property_media m where m.property_id=p.id and m.public_url=x->>'url');
 
+-- Keep normalized media metadata aligned with the JSON gallery used by the current editor.
+create unique index if not exists property_media_property_url_unique
+  on public.property_media(property_id,public_url) where public_url<>'';
+create or replace function public.sync_property_media_from_gallery()
+returns trigger language plpgsql security definer set search_path=public,auth as $
+begin
+  delete from public.property_media m
+    where m.property_id=new.id and m.media_type='image'
+      and not exists (
+        select 1 from jsonb_array_elements(
+          case when jsonb_typeof(new.images)='array' then new.images else '[]'::jsonb end
+        ) x where x->>'url'=m.public_url
+      );
+  insert into public.property_media(
+    agency_id,property_id,media_type,storage_path,public_url,alt_text,sort_order,is_cover,created_by
+  )
+  select new.agency_id,new.id,'image',coalesce(x->>'path',''),x->>'url',
+    coalesce(x->>'alt',new.title),ord-1,ord=1,auth.uid()
+  from jsonb_array_elements(
+    case when jsonb_typeof(new.images)='array' then new.images else '[]'::jsonb end
+  ) with ordinality as g(x,ord)
+  where coalesce(x->>'url','')<>''
+  on conflict(property_id,public_url) where public_url<>''
+  do update set storage_path=excluded.storage_path,alt_text=excluded.alt_text,
+    sort_order=excluded.sort_order,is_cover=excluded.is_cover;
+  return new;
+end $;
+drop trigger if exists properties_sync_gallery on public.properties;
+create trigger properties_sync_gallery after insert or update of images on public.properties
+for each row execute function public.sync_property_media_from_gallery();
+
 -- Multiple localized versions of property copy and SEO metadata.
 create table if not exists public.property_translations (
   id uuid primary key default gen_random_uuid(),
