@@ -47,6 +47,8 @@ revoke all on function public.can_manage_property(uuid,uuid) from public;
 grant execute on function public.has_agency_role(uuid,text[]) to anon,authenticated;
 grant execute on function public.can_manage_property(uuid,uuid) to authenticated;
 
+insert into public.agencies(id,settings) values('00000000-0000-4000-8000-000000000001','{"name":"AUREL","email":"hello@aurel.example","phone":"+00 000 000 000","address":"International · Demonstration agency"}'::jsonb) on conflict(id) do nothing;
+
 -- Reusable listing categories, separate from the commercial transaction type.
 create table if not exists public.property_categories (
   id uuid primary key default gen_random_uuid(),
