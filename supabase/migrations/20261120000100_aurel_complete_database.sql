@@ -60,7 +60,7 @@ for each row execute function public.prevent_last_agency_owner_removal();
 
 drop function if exists public.can_manage_property(uuid,uuid);
 create or replace function public.can_manage_property(a uuid, property_assignee uuid, property_creator uuid)
-returns boolean language sql stable security definer set search_path=public,auth as $
+returns boolean language sql stable security definer set search_path=public,auth as $$
   select exists (
     select 1 from public.agency_members m
     where m.agency_id=a and m.user_id=auth.uid() and m.is_active
@@ -83,7 +83,7 @@ revoke all on function public.can_manage_property(uuid,uuid,uuid) from public;
 grant execute on function public.can_manage_property(uuid,uuid,uuid) to authenticated;
 
 create or replace function public.protect_property_assignment()
-returns trigger language plpgsql security definer set search_path=public,auth as $
+returns trigger language plpgsql security definer set search_path=public,auth as $$
 begin
   if auth.uid() is null or public.is_agency_admin(new.agency_id) then
     return new;
@@ -312,7 +312,7 @@ and not exists(select 1 from public.property_media m where m.property_id=p.id an
 create unique index if not exists property_media_property_url_unique
   on public.property_media(property_id,public_url) where public_url<>'';
 create or replace function public.sync_property_media_from_gallery()
-returns trigger language plpgsql security definer set search_path=public,auth as $
+returns trigger language plpgsql security definer set search_path=public,auth as $$
 begin
   delete from public.property_media m
     where m.property_id=new.id and m.media_type='image'
@@ -415,7 +415,7 @@ create unique index if not exists viewing_requests_inquiry_unique
 
 -- Public website inquiries also create/update the agency CRM contact.
 create or replace function public.link_inquiry_to_client()
-returns trigger language plpgsql security definer set search_path=public,auth as $
+returns trigger language plpgsql security definer set search_path=public,auth as $$
 declare client_uuid uuid;
 begin
   if nullif(lower(trim(new.email)),'') is not null then
@@ -437,7 +437,7 @@ for each row execute function public.link_inquiry_to_client();
 
 -- Keep the dedicated viewing-request table in sync with the existing public inquiry form.
 create or replace function public.sync_viewing_request_from_inquiry()
-returns trigger language plpgsql security definer set search_path=public,auth as $
+returns trigger language plpgsql security definer set search_path=public,auth as $$
 declare agency_tz text; start_at timestamptz; mapped_status text;
 begin
   if new.kind<>'viewing' or new.preferred_date is null or new.preferred_time is null then
