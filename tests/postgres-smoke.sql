@@ -80,9 +80,14 @@ reset role;
 update public.site_settings
 set publication_rules='{"owner":true,"admin":true,"agent":false,"collaborator":false}'::jsonb
 where agency_id='00000000-0000-4000-8000-000000000001';
+set role authenticated;
+set request.jwt.claim.sub='10000000-0000-4000-8000-000000000002';
+update public.properties set status='published',description='Agent edited an already-published listing'
+where slug='agent-approved-publisher';
+reset role;
 do $$ begin
   if (select status from public.properties where slug='agent-approved-publisher') <> 'published' then
-    raise exception 'Agency role-level publication permission did not take effect';
+    raise exception 'Editing an already-published listing incorrectly removed publication';
   end if;
 end $$;
 
