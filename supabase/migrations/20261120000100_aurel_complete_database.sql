@@ -496,7 +496,7 @@ alter table public.site_settings add column if not exists publication_rules json
   default '{"owner":true,"admin":true,"agent":false,"collaborator":false}'::jsonb;
 
 create or replace function public.can_publish_property(a uuid)
-returns boolean language sql stable security definer set search_path=public,auth as $
+returns boolean language sql stable security definer set search_path=public,auth as $$
   select exists(
     select 1 from public.agency_members m
     left join public.site_settings s on s.agency_id=m.agency_id
@@ -511,7 +511,7 @@ revoke all on function public.can_publish_property(uuid) from public;
 grant execute on function public.can_publish_property(uuid) to authenticated;
 
 create or replace function public.enforce_property_publication_approval()
-returns trigger language plpgsql security definer set search_path=public,auth as $
+returns trigger language plpgsql security definer set search_path=public,auth as $$
 begin
   if new.status='published' and not public.can_publish_property(new.agency_id) then
     new.status='pending';
@@ -520,7 +520,7 @@ begin
     new.published_at=coalesce(new.published_at,now());
   end if;
   return new;
-end $;
+end $$;
 drop trigger if exists properties_publication_guard on public.properties;
 create trigger properties_publication_guard before insert or update of status on public.properties
 for each row execute function public.enforce_property_publication_approval();
