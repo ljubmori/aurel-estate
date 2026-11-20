@@ -253,12 +253,18 @@ create table if not exists public.property_price_history (
   foreign key(property_id,agency_id) references public.properties(id,agency_id) on delete cascade
 );
 create index if not exists property_price_history_property on public.property_price_history(property_id,valid_from desc);
-create or replace function public.record_property_price_change()
+create or replace function public.prepare_property_write()
 returns trigger language plpgsql security definer set search_path=public,auth as $$
 begin
   if tg_op='INSERT' and new.created_by is null then
     new.created_by=auth.uid();
   end if;
+  new.updated_at=now();
+  return new;
+end $$;
+create or replace function public.record_property_price_change()
+returns trigger language plpgsql security definer set search_path=public,auth as $$
+begin
   if tg_op='INSERT' or new.price is distinct from old.price
     or new.currency is distinct from old.currency
     or new.price_format is distinct from old.price_format
@@ -266,11 +272,13 @@ begin
     insert into public.property_price_history(agency_id,property_id,price,currency,price_format,price_on_request,changed_by)
     values(new.agency_id,new.id,new.price,new.currency,new.price_format,coalesce(new.price_on_request,false),auth.uid());
   end if;
-  new.updated_at=now();
   return new;
 end $$;
 drop trigger if exists properties_price_history on public.properties;
-create trigger properties_price_history before insert or update on public.properties
+drop trigger if exists properties_prepare_write on public.properties;
+create trigger properties_prepare_write before insert or update on public.properties
+for each row execute function public.prepare_property_write();
+create trigger properties_price_history after insert or update on public.properties
 for each row execute function public.record_property_price_change();
 
 insert into public.property_price_history(agency_id,property_id,price,currency,price_format,price_on_request,valid_from)
