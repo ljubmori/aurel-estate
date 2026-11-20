@@ -40,6 +40,7 @@ jobs:
           psql -h localhost -U postgres -d aurel -v ON_ERROR_STOP=1 -f supabase/schema.sql
           psql -h localhost -U postgres -d aurel -v ON_ERROR_STOP=1 -f supabase/seed.sql
           psql -h localhost -U postgres -d aurel -v ON_ERROR_STOP=1 -f supabase/migrations/20261120000100_aurel_complete_database.sql
+          psql -h localhost -U postgres -d aurel -v ON_ERROR_STOP=1 -f supabase/migrations/20261120000100_aurel_complete_database.sql
       - name: Verify RLS, authentication roles, inquiry CRM, viewing requests and price history
         env:
           PGPASSWORD: postgres
