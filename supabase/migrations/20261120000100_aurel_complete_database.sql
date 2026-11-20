@@ -45,6 +45,7 @@ begin
     end if;
   end if;
   if removing_owner then
+    perform pg_advisory_xact_lock(hashtextextended(old.agency_id::text, 0));
     select count(*) into active_owners from public.agency_members
       where agency_id=old.agency_id and role='owner' and is_active;
     if active_owners<=1 then
@@ -57,8 +58,9 @@ drop trigger if exists protect_last_agency_owner on public.agency_members;
 create trigger protect_last_agency_owner before update or delete on public.agency_members
 for each row execute function public.prevent_last_agency_owner_removal();
 
+drop function if exists public.can_manage_property(uuid,uuid);
 create or replace function public.can_manage_property(a uuid, property_assignee uuid, property_creator uuid)
-returns boolean language sql stable security definer set search_path=public,auth as $$
+returns boolean language sql stable security definer set search_path=public,auth as $
   select exists (
     select 1 from public.agency_members m
     where m.agency_id=a and m.user_id=auth.uid() and m.is_active
@@ -66,20 +68,46 @@ returns boolean language sql stable security definer set search_path=public,auth
         m.role in ('owner','admin')
         or (m.role='agent' and (
           m.data_scope='all'
-          or (m.data_scope='assigned' and property_assignee=auth.uid())
+          or (m.data_scope='assigned' and (property_assignee=auth.uid() or property_creator=auth.uid()))
           or (m.data_scope='own' and property_creator=auth.uid())
         ))
         or (m.role='collaborator' and coalesce((m.permissions->>'properties_write')::boolean,false)
           and (m.data_scope='all'
-            or (m.data_scope='assigned' and property_assignee=auth.uid())
+            or (m.data_scope='assigned' and (property_assignee=auth.uid() or property_creator=auth.uid()))
             or (m.data_scope='own' and property_creator=auth.uid()))
         )
       )
   )
-$$;
-drop function if exists public.can_manage_property(uuid,uuid);
+$;
 revoke all on function public.can_manage_property(uuid,uuid,uuid) from public;
 grant execute on function public.can_manage_property(uuid,uuid,uuid) to authenticated;
+
+create or replace function public.protect_property_assignment()
+returns trigger language plpgsql security definer set search_path=public,auth as $
+begin
+  if auth.uid() is null or public.is_agency_admin(new.agency_id) then
+    return new;
+  end if;
+  if tg_op='INSERT' then
+    if new.created_by is distinct from auth.uid() then
+      raise exception 'A property creator must be the authenticated user.';
+    end if;
+    if new.assigned_to is not null and new.assigned_to is distinct from auth.uid() then
+      raise exception 'Only an agency administrator can assign a property to another user.';
+    end if;
+  else
+    if new.created_by is distinct from old.created_by then
+      raise exception 'Property creator cannot be changed.';
+    end if;
+    if new.assigned_to is distinct from old.assigned_to then
+      raise exception 'Only an agency administrator can change property assignment.';
+    end if;
+  end if;
+  return new;
+end $;
+drop trigger if exists properties_protect_assignment on public.properties;
+create trigger properties_protect_assignment before insert or update on public.properties
+for each row execute function public.protect_property_assignment();
 
 -- Reusable listing categories, separate from the commercial transaction type.
 create table if not exists public.property_categories (
@@ -121,8 +149,12 @@ alter table public.properties add column if not exists seo_description text not 
 alter table public.properties add column if not exists attributes jsonb not null default '{}'::jsonb;
 alter table public.properties add column if not exists currency_original text;
 update public.properties set currency_original=currency where currency_original is null;
-alter table public.properties add constraint properties_category_agency_fk
-  foreign key(category_id,agency_id) references public.property_categories(id,agency_id) on delete set null (category_id);
+do $ begin
+  if not exists(select 1 from pg_constraint where conname='properties_category_agency_fk' and conrelid='public.properties'::regclass) then
+    alter table public.properties add constraint properties_category_agency_fk
+      foreign key(category_id,agency_id) references public.property_categories(id,agency_id) on delete set null (category_id);
+  end if;
+end $;
 
 update public.properties set offer_type = case
   when transaction='rent' and lower(type)='commercial' then 'commercial_lease'
@@ -181,14 +213,30 @@ create table if not exists public.development_units (
 alter table public.properties add column if not exists development_project_id uuid;
 alter table public.properties add column if not exists building_id uuid;
 alter table public.properties add column if not exists development_unit_id uuid;
-alter table public.properties add constraint properties_project_fk foreign key(development_project_id,agency_id)
-  references public.development_projects(id,agency_id) on delete set null (development_project_id);
-alter table public.properties add constraint properties_building_fk foreign key(building_id,agency_id)
-  references public.development_buildings(id,agency_id) on delete set null (building_id);
-alter table public.properties add constraint properties_unit_fk foreign key(development_unit_id,agency_id)
-  references public.development_units(id,agency_id) on delete set null (development_unit_id);
-alter table public.development_units add constraint development_units_property_fk foreign key(property_id,agency_id)
-  references public.properties(id,agency_id) on delete set null (property_id);
+do $ begin
+  if not exists(select 1 from pg_constraint where conname='properties_project_fk' and conrelid='public.properties'::regclass) then
+    alter table public.properties add constraint properties_project_fk foreign key(development_project_id,agency_id)
+      references public.development_projects(id,agency_id) on delete set null (development_project_id);
+  end if;
+end $;
+do $ begin
+  if not exists(select 1 from pg_constraint where conname='properties_building_fk' and conrelid='public.properties'::regclass) then
+    alter table public.properties add constraint properties_building_fk foreign key(building_id,agency_id)
+      references public.development_buildings(id,agency_id) on delete set null (building_id);
+  end if;
+end $;
+do $ begin
+  if not exists(select 1 from pg_constraint where conname='properties_unit_fk' and conrelid='public.properties'::regclass) then
+    alter table public.properties add constraint properties_unit_fk foreign key(development_unit_id,agency_id)
+      references public.development_units(id,agency_id) on delete set null (development_unit_id);
+  end if;
+end $;
+do $ begin
+  if not exists(select 1 from pg_constraint where conname='development_units_property_fk' and conrelid='public.development_units'::regclass) then
+    alter table public.development_units add constraint development_units_property_fk foreign key(property_id,agency_id)
+      references public.properties(id,agency_id) on delete set null (property_id);
+  end if;
+end $;
 
 -- Immutable price history, including initial price and every price/currency change.
 create table if not exists public.property_price_history (
@@ -327,6 +375,63 @@ select agency_id,id,property_id,(preferred_date+coalesce(preferred_time,time '12
 from public.inquiries where kind='viewing' and preferred_date is not null
 and not exists(select 1 from public.viewing_requests v where v.inquiry_id=inquiries.id);
 
+create unique index if not exists clients_agency_email_unique
+  on public.clients(agency_id,lower(email)) where email<>'';
+create unique index if not exists viewing_requests_inquiry_unique
+  on public.viewing_requests(inquiry_id) where inquiry_id is not null;
+
+-- Public website inquiries also create/update the agency CRM contact.
+create or replace function public.link_inquiry_to_client()
+returns trigger language plpgsql security definer set search_path=public,auth as $
+declare client_uuid uuid;
+begin
+  if nullif(lower(trim(new.email)),'') is not null then
+    insert into public.clients(agency_id,first_name,last_name,email,phone,source)
+    values(new.agency_id,split_part(trim(new.name),' ',1),
+      nullif(trim(substr(trim(new.name),length(split_part(trim(new.name),' ',1))+1)),''),
+      lower(trim(new.email)),coalesce(new.phone,''),'website')
+    on conflict(agency_id,lower(email)) where email<>''
+    do update set phone=case when excluded.phone<>'' then excluded.phone else public.clients.phone end,
+      updated_at=now()
+    returning id into client_uuid;
+    new.client_id=client_uuid;
+  end if;
+  return new;
+end $;
+drop trigger if exists inquiries_link_client on public.inquiries;
+create trigger inquiries_link_client before insert on public.inquiries
+for each row execute function public.link_inquiry_to_client();
+
+-- Keep the dedicated viewing-request table in sync with the existing public inquiry form.
+create or replace function public.sync_viewing_request_from_inquiry()
+returns trigger language plpgsql security definer set search_path=public,auth as $
+declare agency_tz text; start_at timestamptz; mapped_status text;
+begin
+  if new.kind<>'viewing' or new.preferred_date is null or new.preferred_time is null then
+    return new;
+  end if;
+  select coalesce(s.timezone,'Europe/Belgrade') into agency_tz
+    from public.site_settings s where s.agency_id=new.agency_id;
+  agency_tz=coalesce(agency_tz,'Europe/Belgrade');
+  start_at=(new.preferred_date+new.preferred_time) at time zone agency_tz;
+  mapped_status=case new.status
+    when 'confirmed_by_agency' then 'confirmed_by_agency'
+    when 'contacted' then 'contacted'
+    when 'rescheduled' then 'rescheduled'
+    when 'declined' then 'declined'
+    when 'completed' then 'completed'
+    else 'new' end;
+  insert into public.viewing_requests(agency_id,inquiry_id,client_id,property_id,requested_start,status)
+  values(new.agency_id,new.id,new.client_id,new.property_id,start_at,mapped_status)
+  on conflict(inquiry_id) where inquiry_id is not null
+  do update set client_id=excluded.client_id,property_id=excluded.property_id,
+    requested_start=excluded.requested_start,status=excluded.status,updated_at=now();
+  return new;
+end $;
+drop trigger if exists inquiries_sync_viewing_request on public.inquiries;
+create trigger inquiries_sync_viewing_request after insert or update of status,preferred_date,preferred_time,property_id
+on public.inquiries for each row execute function public.sync_viewing_request_from_inquiry();
+
 -- Site-level content, settings and SEO.
 create table if not exists public.site_settings (
   id uuid primary key default gen_random_uuid(),
@@ -426,47 +531,84 @@ begin
   end loop;
 end $$;
 
+drop policy if exists properties_staff_read on public.properties;
 create policy properties_staff_read on public.properties for select to authenticated
-  using(public.can_manage_property(agency_id,assigned_to,created_by));
+  using(
+    public.has_agency_role(agency_id,array['owner','admin','agent'])
+    or (
+      public.has_agency_role(agency_id,array['collaborator'])
+      and coalesce((select m.permissions->>'properties_read' from public.agency_members m
+        where m.agency_id=properties.agency_id and m.user_id=auth.uid() and m.is_active),'false')::boolean
+    )
+  );
+drop policy if exists properties_staff_write on public.properties;
 create policy properties_staff_write on public.properties for all to authenticated
-  using(public.can_manage_property(agency_id,assigned_to))
-  with check(public.can_manage_property(agency_id,assigned_to));
+  using(public.can_manage_property(agency_id,assigned_to,created_by))
+  with check(public.can_manage_property(agency_id,assigned_to,created_by));
 
 -- Admins can see the team; only an owner can change memberships/roles.
+drop policy if exists membership_admin_read on public.agency_members;
 create policy membership_admin_read on public.agency_members for select to authenticated
   using(public.is_agency_admin(agency_id));
+drop policy if exists membership_owner_manage on public.agency_members;
 create policy membership_owner_manage on public.agency_members for all to authenticated
   using(public.is_agency_owner(agency_id))
   with check(public.is_agency_owner(agency_id));
 
+drop policy if exists inquiries_staff_read on public.inquiries;
 create policy inquiries_staff_read on public.inquiries for select to authenticated
   using(assigned_to=auth.uid() and public.has_agency_role(agency_id,array['agent']));
+drop policy if exists inquiries_staff_update on public.inquiries;
 create policy inquiries_staff_update on public.inquiries for update to authenticated
   using(assigned_to=auth.uid() and public.has_agency_role(agency_id,array['agent']));
 
+drop policy if exists categories_public_read on public.property_categories;
 create policy categories_public_read on public.property_categories for select to anon,authenticated using(is_active or public.is_agency_admin(agency_id));
+drop policy if exists categories_admin_write on public.property_categories;
 create policy categories_admin_write on public.property_categories for all to authenticated using(public.is_agency_admin(agency_id)) with check(public.is_agency_admin(agency_id));
+drop policy if exists projects_public_read on public.development_projects;
 create policy projects_public_read on public.development_projects for select to anon,authenticated using(status in ('under_construction','completed') or public.is_agency_admin(agency_id));
+drop policy if exists projects_admin_write on public.development_projects;
 create policy projects_admin_write on public.development_projects for all to authenticated using(public.is_agency_admin(agency_id)) with check(public.is_agency_admin(agency_id));
+drop policy if exists buildings_public_read on public.development_buildings;
 create policy buildings_public_read on public.development_buildings for select to anon,authenticated using(exists(select 1 from public.development_projects p where p.id=project_id and p.status in ('under_construction','completed')) or public.is_agency_admin(agency_id));
+drop policy if exists buildings_admin_write on public.development_buildings;
 create policy buildings_admin_write on public.development_buildings for all to authenticated using(public.is_agency_admin(agency_id)) with check(public.is_agency_admin(agency_id));
+drop policy if exists units_public_read on public.development_units;
 create policy units_public_read on public.development_units for select to anon,authenticated using((availability='available' and exists(select 1 from public.development_projects p where p.id=project_id and p.status in ('under_construction','completed'))) or public.is_agency_admin(agency_id));
+drop policy if exists units_admin_write on public.development_units;
 create policy units_admin_write on public.development_units for all to authenticated using(public.is_agency_admin(agency_id)) with check(public.is_agency_admin(agency_id));
+drop policy if exists price_history_admin_read on public.property_price_history;
 create policy price_history_admin_read on public.property_price_history for select to authenticated using(public.is_agency_admin(agency_id));
+drop policy if exists media_public_read on public.property_media;
 create policy media_public_read on public.property_media for select to anon,authenticated using(exists(select 1 from public.properties p where p.id=property_id and p.status='published'));
+drop policy if exists media_admin_write on public.property_media;
 create policy media_admin_write on public.property_media for all to authenticated using(public.is_agency_admin(agency_id)) with check(public.is_agency_admin(agency_id));
+drop policy if exists translations_public_read on public.property_translations;
 create policy translations_public_read on public.property_translations for select to anon,authenticated using(translation_status='published' and exists(select 1 from public.properties p where p.id=property_id and p.status='published'));
+drop policy if exists translations_admin_write on public.property_translations;
 create policy translations_admin_write on public.property_translations for all to authenticated using(public.is_agency_admin(agency_id)) with check(public.is_agency_admin(agency_id));
+drop policy if exists clients_admin_all on public.clients;
 create policy clients_admin_all on public.clients for all to authenticated using(public.is_agency_admin(agency_id) or (assigned_to=auth.uid() and public.has_agency_role(agency_id,array['agent']))) with check(public.is_agency_admin(agency_id) or (assigned_to=auth.uid() and public.has_agency_role(agency_id,array['agent'])));
+drop policy if exists viewing_public_insert on public.viewing_requests;
 create policy viewing_public_insert on public.viewing_requests for insert to anon,authenticated with check(status='new' and exists(select 1 from public.properties p where p.id=property_id and p.agency_id=viewing_requests.agency_id and p.status='published'));
+drop policy if exists viewing_staff_read on public.viewing_requests;
 create policy viewing_staff_read on public.viewing_requests for select to authenticated using(public.is_agency_admin(agency_id) or (assigned_to=auth.uid() and public.has_agency_role(agency_id,array['agent'])));
+drop policy if exists viewing_staff_update on public.viewing_requests;
 create policy viewing_staff_update on public.viewing_requests for update to authenticated using(public.is_agency_admin(agency_id) or (assigned_to=auth.uid() and public.has_agency_role(agency_id,array['agent']))) with check(public.is_agency_admin(agency_id) or (assigned_to=auth.uid() and public.has_agency_role(agency_id,array['agent'])));
+drop policy if exists site_settings_public_read on public.site_settings;
 create policy site_settings_public_read on public.site_settings for select to anon,authenticated using(true);
+drop policy if exists site_settings_admin_write on public.site_settings;
 create policy site_settings_admin_write on public.site_settings for all to authenticated using(public.is_agency_admin(agency_id)) with check(public.is_agency_admin(agency_id));
+drop policy if exists site_pages_public_read on public.site_pages;
 create policy site_pages_public_read on public.site_pages for select to anon,authenticated using(is_published or public.is_agency_admin(agency_id));
+drop policy if exists site_pages_admin_write on public.site_pages;
 create policy site_pages_admin_write on public.site_pages for all to authenticated using(public.is_agency_admin(agency_id)) with check(public.is_agency_admin(agency_id));
+drop policy if exists page_translations_public_read on public.site_page_translations;
 create policy page_translations_public_read on public.site_page_translations for select to anon,authenticated using(exists(select 1 from public.site_pages p where p.id=page_id and p.is_published));
+drop policy if exists page_translations_admin_write on public.site_page_translations;
 create policy page_translations_admin_write on public.site_page_translations for all to authenticated using(public.is_agency_admin(agency_id)) with check(public.is_agency_admin(agency_id));
+drop policy if exists audit_admin_read on public.audit_logs;
 create policy audit_admin_read on public.audit_logs for select to authenticated using(public.is_agency_admin(agency_id));
 -- No direct client writes/deletes to audit logs.
 revoke all on public.audit_logs from anon,authenticated;
