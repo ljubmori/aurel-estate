@@ -423,6 +423,8 @@ create policy audit_admin_read on public.audit_logs for select to authenticated 
 -- No direct client writes/deletes to audit logs.
 revoke all on public.audit_logs from anon,authenticated;
 grant select on public.audit_logs to authenticated;
+grant select,insert,update,delete on public.agency_members to authenticated;
+grant insert on public.viewing_requests to anon,authenticated;
 
 -- Explicit table privileges complement RLS.
 grant select on public.property_categories,public.development_projects,public.development_buildings,
