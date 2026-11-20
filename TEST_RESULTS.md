@@ -8,7 +8,7 @@ Commit: `7ecfe28ef3b3e6bc9ab5d2c214b49e3d67232e54`
 
 GitHub Actions: <https://github.com/ljubmori/aurel-estate/actions/runs/44796616290>
 
-<badge>All automated checks passed</badge>
+**All automated checks passed.**
 
 - `npm ci`: passed.
 - `npm test`: passed (10 Node tests).
