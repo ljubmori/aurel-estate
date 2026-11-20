@@ -149,7 +149,7 @@ alter table public.properties add column if not exists seo_description text not 
 alter table public.properties add column if not exists attributes jsonb not null default '{}'::jsonb;
 alter table public.properties add column if not exists currency_original text;
 update public.properties set currency_original=currency where currency_original is null;
-do $ begin
+do $$ begin
   if not exists(select 1 from pg_constraint where conname='properties_category_agency_fk' and conrelid='public.properties'::regclass) then
     alter table public.properties add constraint properties_category_agency_fk
       foreign key(category_id,agency_id) references public.property_categories(id,agency_id) on delete set null (category_id);
@@ -213,25 +213,25 @@ create table if not exists public.development_units (
 alter table public.properties add column if not exists development_project_id uuid;
 alter table public.properties add column if not exists building_id uuid;
 alter table public.properties add column if not exists development_unit_id uuid;
-do $ begin
+do $$ begin
   if not exists(select 1 from pg_constraint where conname='properties_project_fk' and conrelid='public.properties'::regclass) then
     alter table public.properties add constraint properties_project_fk foreign key(development_project_id,agency_id)
       references public.development_projects(id,agency_id) on delete set null (development_project_id);
   end if;
 end $$;
-do $ begin
+do $$ begin
   if not exists(select 1 from pg_constraint where conname='properties_building_fk' and conrelid='public.properties'::regclass) then
     alter table public.properties add constraint properties_building_fk foreign key(building_id,agency_id)
       references public.development_buildings(id,agency_id) on delete set null (building_id);
   end if;
 end $$;
-do $ begin
+do $$ begin
   if not exists(select 1 from pg_constraint where conname='properties_unit_fk' and conrelid='public.properties'::regclass) then
     alter table public.properties add constraint properties_unit_fk foreign key(development_unit_id,agency_id)
       references public.development_units(id,agency_id) on delete set null (development_unit_id);
   end if;
 end $$;
-do $ begin
+do $$ begin
   if not exists(select 1 from pg_constraint where conname='development_units_property_fk' and conrelid='public.development_units'::regclass) then
     alter table public.development_units add constraint development_units_property_fk foreign key(property_id,agency_id)
       references public.properties(id,agency_id) on delete set null (property_id);
