@@ -1,0 +1,94 @@
+-- Verify seeded catalog and baseline public visibility.
+do $$ begin
+  if (select count(*) from public.properties where status='published') < 1 then
+    raise exception 'Seed did not create published properties';
+  end if;
+  if not (select relrowsecurity from pg_class where oid='public.properties'::regclass) then
+    raise exception 'RLS is not enabled on properties';
+  end if;
+end $$;
+
+-- Create test identities and their memberships as the database owner.
+insert into auth.users(id) values
+ ('10000000-0000-4000-8000-000000000001'),
+ ('10000000-0000-4000-8000-000000000002'),
+ ('10000000-0000-4000-8000-000000000003');
+insert into public.agency_members(agency_id,user_id,role,data_scope,is_active)
+values
+ ('00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','owner','all',true),
+ ('00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002','agent','own',true);
+
+-- An anonymous visitor can see published properties, but not drafts.
+set role anon;
+do $$ begin
+  if (select count(*) from public.properties where status='published') < 1 then
+    raise exception 'Anonymous visitor cannot read published properties';
+  end if;
+  if (select count(*) from public.properties where status<>'published') <> 0 then
+    raise exception 'Anonymous visitor can read unpublished properties';
+  end if;
+end $$;
+reset role;
+
+-- Public inquiry inserts must create a CRM client and, for viewings, a viewing request.
+select id as seeded_property_id from public.properties where status='published' order by created_at limit 1 \gset
+set role anon;
+insert into public.inquiries(agency_id,property_id,kind,name,email,phone,message,status,preferred_date,preferred_time)
+values ('00000000-0000-4000-8000-000000000001', :'seeded_property_id','viewing',
+ 'Test Visitor','db-smoke@example.test','+38160000000','Database smoke test','new','2099-05-01','12:00');
+reset role;
+do $$ begin
+  if not exists(select 1 from public.clients where lower(email)='db-smoke@example.test') then
+    raise exception 'Inquiry did not create CRM client';
+  end if;
+  if not exists(select 1 from public.viewing_requests v join public.inquiries i on i.id=v.inquiry_id where i.email='db-smoke@example.test') then
+    raise exception 'Viewing inquiry did not create a viewing request';
+  end if;
+end $$;
+
+-- An agent can create and edit their own listing, and sees the whole agency catalog.
+set role authenticated;
+set request.jwt.claim.sub='10000000-0000-4000-8000-000000000002';
+insert into public.properties(agency_id,title,slug,type,transaction,status,country,city,price,currency,area)
+values ('00000000-0000-4000-8000-000000000001','Agent test property','agent-test-property',
+ 'Apartment','sale','draft','Serbia','Novi Sad',100000,'EUR',50)
+returning id as agent_property_id \gset
+update public.properties set price=105000 where id=:'agent_property_id';
+do $$ begin
+  if (select count(*) from public.properties) < 2 then
+    raise exception 'Agent cannot see all agency properties';
+  end if;
+end $$;
+reset role;
+
+do $$ begin
+  if not exists(select 1 from public.properties where slug='agent-test-property' and created_by='10000000-0000-4000-8000-000000000002') then
+    raise exception 'Agent-created listing creator attribution failed';
+  end if;
+  if (select count(*) from public.property_price_history where property_id=(select id from public.properties where slug='agent-test-property')) < 2 then
+    raise exception 'Initial and changed prices were not both recorded';
+  end if;
+end $$;
+
+-- A signed-in user without agency membership cannot see draft listings.
+set role authenticated;
+set request.jwt.claim.sub='10000000-0000-4000-8000-000000000003';
+do $$ begin
+  if (select count(*) from public.properties where slug='agent-test-property') <> 0 then
+    raise exception 'Non-member can read private draft property';
+  end if;
+end $$;
+reset role;
+
+-- The last active owner cannot be removed.
+do $$ begin
+  begin
+    update public.agency_members set is_active=false
+    where user_id='10000000-0000-4000-8000-000000000001';
+    raise exception 'Last owner protection did not block deactivation';
+  exception when raise_exception then
+    if sqlerrm='Last owner protection did not block deactivation' then raise; end if;
+  end;
+end $$;
+
+select 'AUREL database smoke tests passed' as result;
