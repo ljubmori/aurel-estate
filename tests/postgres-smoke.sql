@@ -18,6 +18,12 @@ values
  ('00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','owner','all',true),
  ('00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002','agent','own',true);
 
+do $$ begin
+  if not exists(select 1 from public.audit_logs where entity_type='agency_members' and entity_id='10000000-0000-4000-8000-000000000002') then
+    raise exception 'Agency membership changes are not recorded in audit history';
+  end if;
+end $$;
+
 -- An anonymous visitor can see published properties, but not drafts.
 set role anon;
 do $$ begin
