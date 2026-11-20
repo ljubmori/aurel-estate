@@ -365,6 +365,22 @@ drop trigger if exists audit_clients on public.clients;
 create trigger audit_clients after insert or update or delete on public.clients for each row execute function public.write_audit_log();
 drop trigger if exists audit_projects on public.development_projects;
 create trigger audit_projects after insert or update or delete on public.development_projects for each row execute function public.write_audit_log();
+drop trigger if exists audit_categories on public.property_categories;
+create trigger audit_categories after insert or update or delete on public.property_categories for each row execute function public.write_audit_log();
+drop trigger if exists audit_buildings on public.development_buildings;
+create trigger audit_buildings after insert or update or delete on public.development_buildings for each row execute function public.write_audit_log();
+drop trigger if exists audit_units on public.development_units;
+create trigger audit_units after insert or update or delete on public.development_units for each row execute function public.write_audit_log();
+drop trigger if exists audit_media on public.property_media;
+create trigger audit_media after insert or update or delete on public.property_media for each row execute function public.write_audit_log();
+drop trigger if exists audit_translations on public.property_translations;
+create trigger audit_translations after insert or update or delete on public.property_translations for each row execute function public.write_audit_log();
+drop trigger if exists audit_viewings on public.viewing_requests;
+create trigger audit_viewings after insert or update or delete on public.viewing_requests for each row execute function public.write_audit_log();
+drop trigger if exists audit_site_settings on public.site_settings;
+create trigger audit_site_settings after insert or update or delete on public.site_settings for each row execute function public.write_audit_log();
+drop trigger if exists audit_site_pages on public.site_pages;
+create trigger audit_site_pages after insert or update or delete on public.site_pages for each row execute function public.write_audit_log();
 
 -- RLS: agency-scoped data. Public access is limited to published catalog content and media.
 do $$
@@ -398,11 +414,11 @@ create policy inquiries_staff_update on public.inquiries for update to authentic
 
 create policy categories_public_read on public.property_categories for select to anon,authenticated using(is_active or public.is_agency_admin(agency_id));
 create policy categories_admin_write on public.property_categories for all to authenticated using(public.is_agency_admin(agency_id)) with check(public.is_agency_admin(agency_id));
-create policy projects_public_read on public.development_projects for select to anon,authenticated using(status='completed' or public.is_agency_admin(agency_id));
+create policy projects_public_read on public.development_projects for select to anon,authenticated using(status in ('under_construction','completed') or public.is_agency_admin(agency_id));
 create policy projects_admin_write on public.development_projects for all to authenticated using(public.is_agency_admin(agency_id)) with check(public.is_agency_admin(agency_id));
-create policy buildings_public_read on public.development_buildings for select to anon,authenticated using(exists(select 1 from public.development_projects p where p.id=project_id and p.status='completed') or public.is_agency_admin(agency_id));
+create policy buildings_public_read on public.development_buildings for select to anon,authenticated using(exists(select 1 from public.development_projects p where p.id=project_id and p.status in ('under_construction','completed')) or public.is_agency_admin(agency_id));
 create policy buildings_admin_write on public.development_buildings for all to authenticated using(public.is_agency_admin(agency_id)) with check(public.is_agency_admin(agency_id));
-create policy units_public_read on public.development_units for select to anon,authenticated using(availability='available' or public.is_agency_admin(agency_id));
+create policy units_public_read on public.development_units for select to anon,authenticated using((availability='available' and exists(select 1 from public.development_projects p where p.id=project_id and p.status in ('under_construction','completed'))) or public.is_agency_admin(agency_id));
 create policy units_admin_write on public.development_units for all to authenticated using(public.is_agency_admin(agency_id)) with check(public.is_agency_admin(agency_id));
 create policy price_history_admin_read on public.property_price_history for select to authenticated using(public.is_agency_admin(agency_id));
 create policy media_public_read on public.property_media for select to anon,authenticated using(exists(select 1 from public.properties p where p.id=property_id and p.status='published'));
@@ -411,8 +427,8 @@ create policy translations_public_read on public.property_translations for selec
 create policy translations_admin_write on public.property_translations for all to authenticated using(public.is_agency_admin(agency_id)) with check(public.is_agency_admin(agency_id));
 create policy clients_admin_all on public.clients for all to authenticated using(public.is_agency_admin(agency_id) or (assigned_to=auth.uid() and public.has_agency_role(agency_id,array['agent']))) with check(public.is_agency_admin(agency_id) or (assigned_to=auth.uid() and public.has_agency_role(agency_id,array['agent'])));
 create policy viewing_public_insert on public.viewing_requests for insert to anon,authenticated with check(status='new' and exists(select 1 from public.properties p where p.id=property_id and p.agency_id=viewing_requests.agency_id and p.status='published'));
-create policy viewing_staff_read on public.viewing_requests for select to authenticated using(public.is_agency_admin(agency_id) or assigned_to=auth.uid());
-create policy viewing_staff_update on public.viewing_requests for update to authenticated using(public.is_agency_admin(agency_id) or assigned_to=auth.uid()) with check(public.is_agency_admin(agency_id) or assigned_to=auth.uid());
+create policy viewing_staff_read on public.viewing_requests for select to authenticated using(public.is_agency_admin(agency_id) or (assigned_to=auth.uid() and public.has_agency_role(agency_id,array['agent'])));
+create policy viewing_staff_update on public.viewing_requests for update to authenticated using(public.is_agency_admin(agency_id) or assigned_to=auth.uid()) with check(public.is_agency_admin(agency_id) or (assigned_to=auth.uid() and public.has_agency_role(agency_id,array['agent'])));
 create policy site_settings_public_read on public.site_settings for select to anon,authenticated using(true);
 create policy site_settings_admin_write on public.site_settings for all to authenticated using(public.is_agency_admin(agency_id)) with check(public.is_agency_admin(agency_id));
 create policy site_pages_public_read on public.site_pages for select to anon,authenticated using(is_published or public.is_agency_admin(agency_id));
