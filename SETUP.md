@@ -52,6 +52,7 @@ For an existing AUREL installation, first confirm that `supabase/schema.sql` and
 - Media metadata for images, video, floor plans, 360 tours and 3D models
 - AI-generated media identification and verification notes
 - Agents, agency members, roles, permission metadata and data scopes
+- Publication approval defaults by role in `site_settings.publication_rules`; `agency_members.can_publish` optionally overrides the default for one staff member. Owners and admins can always publish. Staff without permission can save a listing as draft, but a requested publish is moved to `pending` until an authorized user publishes it.
 - Clients, inquiries and separate viewing requests
 - English/Serbian property translations and extensible language records
 - Site settings, design settings, SEO settings and translated page content
