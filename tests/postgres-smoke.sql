@@ -70,6 +70,31 @@ do $$ begin
   end if;
 end $$;
 
+-- Owner can upload public listing media; agents cannot upload to Storage.
+set role authenticated;
+set request.jwt.claim.sub='10000000-0000-4000-8000-000000000001';
+insert into storage.objects(bucket_id,name)
+values('property-media','00000000-0000-4000-8000-000000000001/db-smoke-owner.jpg');
+reset role;
+do $ begin
+  if not exists(select 1 from storage.objects where name='00000000-0000-4000-8000-000000000001/db-smoke-owner.jpg') then
+    raise exception 'Owner Storage upload was not saved';
+  end if;
+end $;
+
+set role authenticated;
+set request.jwt.claim.sub='10000000-0000-4000-8000-000000000002';
+do $ begin
+  begin
+    insert into storage.objects(bucket_id,name)
+    values('property-media','00000000-0000-4000-8000-000000000001/db-smoke-agent.jpg');
+    raise exception 'Agent Storage upload unexpectedly succeeded';
+  exception when insufficient_privilege then
+    null;
+  end;
+end $;
+reset role;
+
 -- A signed-in user without agency membership cannot see draft listings.
 set role authenticated;
 set request.jwt.claim.sub='10000000-0000-4000-8000-000000000003';
