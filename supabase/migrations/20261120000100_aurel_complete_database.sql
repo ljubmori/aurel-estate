@@ -321,6 +321,8 @@ begin
           case when jsonb_typeof(new.images)='array' then new.images else '[]'::jsonb end
         ) x where x->>'url'=m.public_url
       );
+  update public.property_media set is_cover=false
+    where property_id=new.id and media_type='image';
   insert into public.property_media(
     agency_id,property_id,media_type,storage_path,public_url,alt_text,sort_order,is_cover,created_by
   )
