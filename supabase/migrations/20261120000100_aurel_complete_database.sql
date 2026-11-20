@@ -516,13 +516,20 @@ where status='published' and published_at is null;
 create or replace function public.enforce_property_publication_approval()
 returns trigger language plpgsql security definer set search_path=public,auth as $$
 begin
-  if new.status='published' then
+  if tg_op='INSERT' then
+    if new.status='published' then
+      if not public.can_publish_property(new.agency_id) then
+        new.status='pending';
+        new.published_at=null;
+      else
+        new.published_at=coalesce(new.published_at,now());
+      end if;
+    end if;
+  elsif new.status='published' and old.status is distinct from 'published' then
     if not public.can_publish_property(new.agency_id) then
       new.status='pending';
       new.published_at=null;
-    elsif tg_op='INSERT' then
-      new.published_at=coalesce(new.published_at,now());
-    elsif old.status is distinct from 'published' then
+    else
       new.published_at=coalesce(new.published_at,now());
     end if;
   end if;
