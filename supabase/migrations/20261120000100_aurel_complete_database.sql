@@ -33,6 +33,24 @@ $;
 revoke all on function public.is_agency_owner(uuid) from public;
 grant execute on function public.is_agency_owner(uuid) to authenticated;
 
+create or replace function public.prevent_last_agency_owner_removal()
+returns trigger language plpgsql security definer set search_path=public as $
+declare active_owners integer;
+begin
+  if old.role='owner' and old.is_active and
+    (tg_op='DELETE' or new.role<>'owner' or not new.is_active) then
+    select count(*) into active_owners from public.agency_members
+      where agency_id=old.agency_id and role='owner' and is_active;
+    if active_owners<=1 then
+      raise exception 'The agency must always have at least one active owner.';
+    end if;
+  end if;
+  if tg_op='DELETE' then return old; else return new; end if;
+end $;
+drop trigger if exists protect_last_agency_owner on public.agency_members;
+create trigger protect_last_agency_owner before update or delete on public.agency_members
+for each row execute function public.prevent_last_agency_owner_removal();
+
 create or replace function public.can_manage_property(a uuid, property_agent uuid)
 returns boolean language sql stable security definer set search_path=public,auth as $$
   select exists (
