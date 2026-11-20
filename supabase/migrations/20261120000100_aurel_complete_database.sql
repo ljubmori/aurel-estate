@@ -506,7 +506,7 @@ returns boolean language sql stable security definer set search_path=public,auth
         or coalesce(m.can_publish,(s.publication_rules->>m.role)::boolean,false)
       )
   )
-$;
+$$;
 revoke all on function public.can_publish_property(uuid) from public;
 grant execute on function public.can_publish_property(uuid) to authenticated;
 
