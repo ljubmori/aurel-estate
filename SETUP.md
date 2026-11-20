@@ -66,7 +66,7 @@ Open `/admin` and sign in with the Supabase Auth email and password. There is no
 
 ## Storage
 
-The `property-media` bucket is used for listing media. The first path segment must be the agency UUID. Public visitors can read published property media; only authorized agency administrators can upload, update or delete files. Never upload confidential identity documents or private client files to the public property-media bucket.
+The `property-media` bucket is public because the current listing gallery uses public image URLs. Anyone who obtains an object URL can read that file, including a file uploaded for a draft listing. Only authorized agency administrators can upload, update or delete objects through the configured Storage policies. Use this bucket only for public-facing listing photos, videos and floor plans. Never upload identity documents, contracts, private client files, unpublished marketing material that must remain confidential, or any other sensitive content. A separate private bucket with signed URLs and stricter policies is required before confidential media is supported.
 
 ## Build and tests
 
