@@ -57,7 +57,7 @@ drop trigger if exists protect_last_agency_owner on public.agency_members;
 create trigger protect_last_agency_owner before update or delete on public.agency_members
 for each row execute function public.prevent_last_agency_owner_removal();
 
-create or replace function public.can_manage_property(a uuid, property_agent uuid)
+create or replace function public.can_manage_property(a uuid, property_assignee uuid, property_creator uuid)
 returns boolean language sql stable security definer set search_path=public,auth as $$
   select exists (
     select 1 from public.agency_members m
@@ -66,20 +66,20 @@ returns boolean language sql stable security definer set search_path=public,auth
         m.role in ('owner','admin')
         or (m.role='agent' and (
           m.data_scope='all'
-          or (m.data_scope='assigned' and property_agent=auth.uid())
-          or (m.data_scope='own' and property_agent=auth.uid())
+          or (m.data_scope='assigned' and property_assignee=auth.uid())
+          or (m.data_scope='own' and property_creator=auth.uid())
         ))
         or (m.role='collaborator' and coalesce((m.permissions->>'properties_write')::boolean,false)
-          and (m.data_scope='all' or property_agent=auth.uid()))
+          and (m.data_scope='all'
+            or (m.data_scope='assigned' and property_assignee=auth.uid())
+            or (m.data_scope='own' and property_creator=auth.uid()))
+        )
       )
   )
 $$;
-revoke all on function public.has_agency_role(uuid,text[]) from public;
 revoke all on function public.can_manage_property(uuid,uuid) from public;
-grant execute on function public.has_agency_role(uuid,text[]) to anon,authenticated;
-grant execute on function public.can_manage_property(uuid,uuid) to authenticated;
-
-insert into public.agencies(id,settings) values('00000000-0000-4000-8000-000000000001','{"name":"AUREL","email":"hello@aurel.example","phone":"+00 000 000 000","address":"International · Demonstration agency"}'::jsonb) on conflict(id) do nothing;
+revoke all on function public.can_manage_property(uuid,uuid,uuid) from public;
+grant execute on function public.can_manage_property(uuid,uuid,uuid) to authenticated;
 
 -- Reusable listing categories, separate from the commercial transaction type.
 create table if not exists public.property_categories (
@@ -208,6 +208,9 @@ create index if not exists property_price_history_property on public.property_pr
 create or replace function public.record_property_price_change()
 returns trigger language plpgsql security definer set search_path=public,auth as $$
 begin
+  if tg_op='INSERT' and new.created_by is null then
+    new.created_by=auth.uid();
+  end if;
   if tg_op='INSERT' or new.price is distinct from old.price
     or new.currency is distinct from old.currency
     or new.price_format is distinct from old.price_format
@@ -424,7 +427,7 @@ begin
 end $$;
 
 create policy properties_staff_read on public.properties for select to authenticated
-  using(public.can_manage_property(agency_id,assigned_to));
+  using(public.can_manage_property(agency_id,assigned_to,created_by));
 create policy properties_staff_write on public.properties for all to authenticated
   using(public.can_manage_property(agency_id,assigned_to))
   with check(public.can_manage_property(agency_id,assigned_to));
