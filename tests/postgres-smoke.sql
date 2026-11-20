@@ -57,14 +57,14 @@ update public.properties set price=105000 where id=:'agent_property_id';
 insert into public.properties(agency_id,title,slug,type,transaction,status,country,city,price,currency,area)
 values ('00000000-0000-4000-8000-000000000001','Agent publication request','agent-publication-request',
  'Apartment','sale','published','Serbia','Belgrade',150000,'EUR',60);
-do $ begin
+do $$ begin
   if (select count(*) from public.properties) < 2 then
     raise exception 'Agent cannot see all agency properties';
   end if;
   if (select status from public.properties where slug='agent-publication-request') <> 'pending' then
     raise exception 'Agent bypassed the default publication approval rule';
   end if;
-end $;
+end $$;
 reset role;
 
 -- The agency owner can change the role-level publication rule.
@@ -80,13 +80,13 @@ reset role;
 update public.site_settings
 set publication_rules='{"owner":true,"admin":true,"agent":false,"collaborator":false}'::jsonb
 where agency_id='00000000-0000-4000-8000-000000000001';
-do $ begin
+do $$ begin
   if (select status from public.properties where slug='agent-approved-publisher') <> 'published' then
     raise exception 'Agency role-level publication permission did not take effect';
   end if;
-end $;
+end $$;
 
-do $ begin
+do $$ begin
   if not exists(select 1 from public.properties where slug='agent-test-property' and created_by='10000000-0000-4000-8000-000000000002') then
     raise exception 'Agent-created listing creator attribution failed';
   end if;
@@ -101,15 +101,15 @@ set request.jwt.claim.sub='10000000-0000-4000-8000-000000000001';
 insert into storage.objects(bucket_id,name)
 values('property-media','00000000-0000-4000-8000-000000000001/db-smoke-owner.jpg');
 reset role;
-do $ begin
+do $$ begin
   if not exists(select 1 from storage.objects where name='00000000-0000-4000-8000-000000000001/db-smoke-owner.jpg') then
     raise exception 'Owner Storage upload was not saved';
   end if;
-end $;
+end $$;
 
 set role authenticated;
 set request.jwt.claim.sub='10000000-0000-4000-8000-000000000002';
-do $ begin
+do $$ begin
   begin
     insert into storage.objects(bucket_id,name)
     values('property-media','00000000-0000-4000-8000-000000000001/db-smoke-agent.jpg');
@@ -117,7 +117,7 @@ do $ begin
   exception when insufficient_privilege then
     null;
   end;
-end $;
+end $$;
 reset role;
 
 -- A signed-in user without agency membership cannot see draft listings.
