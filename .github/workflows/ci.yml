@@ -48,6 +48,8 @@ jobs:
           psql -h localhost -U postgres -d aurel -v ON_ERROR_STOP=1 -f supabase/migrations/20261122000300_agent_and_collaborator_permission_scope.sql
           psql -h localhost -U postgres -d aurel -v ON_ERROR_STOP=1 -f supabase/migrations/20261122000300_agent_and_collaborator_permission_scope.sql
           psql -h localhost -U postgres -d aurel -v ON_ERROR_STOP=1 -f supabase/migrations/20261122000400_membership_audit_actor_attribution.sql
+          psql -h localhost -U postgres -d aurel -v ON_ERROR_STOP=1 -f supabase/migrations/20261122000500_restore_membership_audit_trigger.sql
+          psql -h localhost -U postgres -d aurel -v ON_ERROR_STOP=1 -f supabase/migrations/20261122000500_restore_membership_audit_trigger.sql
           psql -h localhost -U postgres -d aurel -v ON_ERROR_STOP=1 -f supabase/migrations/20261122000400_membership_audit_actor_attribution.sql
       - name: Verify RLS, authentication roles, inquiry CRM, viewing requests and price history
         env:
