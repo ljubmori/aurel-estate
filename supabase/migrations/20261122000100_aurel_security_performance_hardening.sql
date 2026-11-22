@@ -1,5 +1,78 @@
 -- AUREL: RLS policy consolidation, private authorization helpers and FK indexes.
 begin;
+-- Drop every policy this migration recreates so the migration is safe to re-run.
+do $
+declare item record;
+begin
+  for item in
+    select * from (values
+    ('agency_members','membership_read'),
+    ('agency_members','membership_owner_insert'),
+    ('agency_members','membership_owner_update'),
+    ('agency_members','membership_owner_delete'),
+    ('agents','agents_admin_insert'),
+    ('agents','agents_admin_update'),
+    ('agents','agents_admin_delete'),
+    ('properties','properties_public_read'),
+    ('properties','properties_staff_read'),
+    ('properties','properties_staff_insert'),
+    ('properties','properties_staff_update'),
+    ('properties','properties_staff_delete'),
+    ('inquiries','inquiries_staff_read'),
+    ('inquiries','inquiries_staff_update'),
+    ('property_categories','categories_public_read'),
+    ('property_categories','categories_staff_read'),
+    ('property_categories','categories_admin_insert'),
+    ('property_categories','categories_admin_update'),
+    ('property_categories','categories_admin_delete'),
+    ('development_projects','projects_public_read'),
+    ('development_projects','projects_staff_read'),
+    ('development_projects','projects_admin_insert'),
+    ('development_projects','projects_admin_update'),
+    ('development_projects','projects_admin_delete'),
+    ('development_buildings','buildings_public_read'),
+    ('development_buildings','buildings_staff_read'),
+    ('development_buildings','buildings_admin_insert'),
+    ('development_buildings','buildings_admin_update'),
+    ('development_buildings','buildings_admin_delete'),
+    ('development_units','units_public_read'),
+    ('development_units','units_staff_read'),
+    ('development_units','units_admin_insert'),
+    ('development_units','units_admin_update'),
+    ('development_units','units_admin_delete'),
+    ('property_media','media_public_read'),
+    ('property_media','media_staff_read'),
+    ('property_media','media_admin_insert'),
+    ('property_media','media_admin_update'),
+    ('property_media','media_admin_delete'),
+    ('property_translations','translations_public_read'),
+    ('property_translations','translations_staff_read'),
+    ('property_translations','translations_admin_insert'),
+    ('property_translations','translations_admin_update'),
+    ('property_translations','translations_admin_delete'),
+    ('viewing_requests','viewing_staff_read'),
+    ('viewing_requests','viewing_staff_update'),
+    ('site_settings','site_settings_admin_insert'),
+    ('site_settings','site_settings_admin_update'),
+    ('site_settings','site_settings_admin_delete'),
+    ('site_pages','site_pages_public_read'),
+    ('site_pages','site_pages_staff_read'),
+    ('site_pages','site_pages_admin_insert'),
+    ('site_pages','site_pages_admin_update'),
+    ('site_pages','site_pages_admin_delete'),
+    ('site_page_translations','page_translations_public_read'),
+    ('site_page_translations','page_translations_staff_read'),
+    ('site_page_translations','page_translations_admin_insert'),
+    ('site_page_translations','page_translations_admin_update'),
+    ('site_page_translations','page_translations_admin_delete'),
+    ('audit_logs','audit_admin_read'),
+    ('clients','clients_admin_all')
+    ) as policies(table_name,policy_name)
+  loop
+    execute format('drop policy if exists %I on public.%I',item.policy_name,item.table_name);
+  end loop;
+end $;
+
 create schema if not exists private;
 revoke all on schema private from public,anon,authenticated;
 grant usage on schema private to authenticated;
