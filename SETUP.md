@@ -23,7 +23,7 @@ For a new Supabase project:
 1. Open the Supabase SQL Editor as the project owner.
 2. Apply `supabase/schema.sql`.
 3. Apply `supabase/seed.sql` to create the AUREL demo agency and fictional listings.
-4. Apply all five files in `supabase/migrations/` in timestamp order (`20261120000100` through `20261122000400`).
+4. Apply all six files in `supabase/migrations/` in timestamp order (`20261120000100` through `20261122000500`).
 5. In Supabase Authentication, create the first administrator using the intended email and a strong password. Disable public sign-ups after the first owner account is created.
 6. In SQL Editor, grant that Auth user owner access:
 
@@ -42,7 +42,7 @@ set role='owner', data_scope='all', is_active=true;
 
 Find the Auth user UUID in Supabase Authentication → Users. Do not use the email address as the user ID.
 
-For an existing AUREL installation, first confirm that `supabase/schema.sql` and `supabase/seed.sql` have already been applied to that same Supabase project. These migrations are not a standalone bootstrap for an empty or unrelated database. Take a verified backup, review the target project reference, then apply both migrations in timestamp order. The first adds tables and columns and migrates existing property images and English/Serbian listing copy into normalized media and translation records. The second moves privileged authorization helpers into a non-exposed schema, consolidates RLS policies and adds missing foreign-key indexes. Do not apply the demo seed to a production agency without reviewing its sample content.
+For an existing AUREL installation, first confirm that `supabase/schema.sql` and `supabase/seed.sql` have already been applied to that same Supabase project. These migrations are not a standalone bootstrap for an empty or unrelated database. Take a verified backup, review the target project reference, then apply the pending migrations in timestamp order. The first adds tables and columns and migrates existing property images and English/Serbian listing copy into normalized media and translation records. The second moves privileged authorization helpers into a non-exposed schema, consolidates RLS policies and adds missing foreign-key indexes. Do not apply the demo seed to a production agency without reviewing its sample content.
 
 ## Database model included in the migration
 
@@ -77,7 +77,7 @@ npm run build
 npm test
 ```
 
-GitHub Actions additionally starts a clean PostgreSQL 16 instance, applies the base schema and demo seed, applies both migrations twice to check rerun safety, then exercises public RLS, owner/agent access, inquiry-to-CRM linking, viewing-request creation, price history, publication approval, Storage write permissions and last-owner protection.
+GitHub Actions additionally starts a clean PostgreSQL 16 instance, applies the base schema and demo seed, applies all migrations twice to check rerun safety, then exercises public RLS, owner/agent access, inquiry-to-CRM linking, viewing-request creation, price history, publication approval, Storage write permissions and last-owner protection.
 
 The edge Worker is only a static asset handler for the frontend. It does not accept API writes and has no D1 or R2 dependency. All application data requests go directly to Supabase under RLS.
 
