@@ -1,7 +1,7 @@
 -- AUREL: RLS policy consolidation, private authorization helpers and FK indexes.
 begin;
 -- Drop every policy this migration recreates so the migration is safe to re-run.
-do $
+do $$
 declare item record;
 begin
   for item in
@@ -71,7 +71,7 @@ begin
   loop
     execute format('drop policy if exists %I on public.%I',item.policy_name,item.table_name);
   end loop;
-end $;
+end $$;
 
 create schema if not exists private;
 revoke all on schema private from public,anon,authenticated;
