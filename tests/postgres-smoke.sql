@@ -24,7 +24,7 @@ update public.agency_members set permissions='{"properties_read":true,"propertie
 where user_id='10000000-0000-4000-8000-000000000004';
 reset request.jwt.claim.sub;
 
-do $ begin
+do $$ begin
   if not exists(select 1 from public.audit_logs where entity_type='agency_member' and entity_id='10000000-0000-4000-8000-000000000002') then
     raise exception 'Agency membership changes are not recorded in audit history';
   end if;
@@ -126,14 +126,14 @@ set request.jwt.claim.sub='10000000-0000-4000-8000-000000000002';
 update public.properties set price=999999 where slug='owner-only-property';
 delete from public.properties where slug='agent-test-property';
 reset role;
-do $ begin
+do $$ begin
   if (select price from public.properties where slug='owner-only-property') <> 250000 then
     raise exception 'Agent changed a listing owned by another user';
   end if;
   if not exists(select 1 from public.properties where slug='agent-test-property') then
     raise exception 'Agent unexpectedly deleted their own listing';
   end if;
-end $;
+end $$;
 
 -- A collaborator with explicit properties_write can edit assigned/own records, but not delete without properties_delete.
 set role authenticated;
@@ -145,14 +145,14 @@ returning id as collaborator_property_id \gset
 update public.properties set price=130000 where id=:'collaborator_property_id';
 delete from public.properties where id=:'collaborator_property_id';
 reset role;
-do $ begin
+do $$ begin
   if (select price from public.properties where slug='collaborator-property') <> 130000 then
     raise exception 'Collaborator with write permission could not edit own listing';
   end if;
   if not exists(select 1 from public.properties where slug='collaborator-property') then
     raise exception 'Collaborator deleted a listing without delete permission';
   end if;
-end $;
+end $$;
 
 -- Owner can upload public listing media; agents cannot upload to Storage.
 set role authenticated;
@@ -205,11 +205,11 @@ insert into public.agency_members(agency_id,user_id,role,data_scope,is_active,pe
 values ('00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000003','admin','all',true,'{}');
 set role authenticated;
 set request.jwt.claim.sub='10000000-0000-4000-8000-000000000003';
-do $ begin
+do $$ begin
   if not exists(select 1 from public.properties where slug='owner-only-property') then
     raise exception 'Administrator cannot read an agency private draft';
   end if;
-end $;
+end $$;
 reset role;
 
 -- Deactivating a member must immediately remove access to private records.
@@ -217,11 +217,11 @@ update public.agency_members set is_active=false
 where user_id='10000000-0000-4000-8000-000000000002';
 set role authenticated;
 set request.jwt.claim.sub='10000000-0000-4000-8000-000000000002';
-do $ begin
+do $$ begin
   if exists(select 1 from public.properties where slug='agent-test-property') then
     raise exception 'Deactivated agent can still read a private draft';
   end if;
-end $;
+end $$;
 reset role;
 update public.agency_members set is_active=true
 where user_id='10000000-0000-4000-8000-000000000002';
@@ -231,10 +231,10 @@ set role authenticated;
 set request.jwt.claim.sub='10000000-0000-4000-8000-000000000004';
 update public.properties set price=987654 where slug='agent-test-property';
 reset role;
-do $ begin
+do $$ begin
   if (select price from public.properties where slug='agent-test-property') <> 105000 then
     raise exception 'Collaborator edited an out-of-scope property';
   end if;
-end $;
+end $$;
 
 select 'AUREL database smoke tests passed' as result;
