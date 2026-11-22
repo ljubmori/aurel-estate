@@ -11,6 +11,9 @@ Configured project reference: `pllvsfbxtymoyavcjcxx` (EU West, PostgreSQL 17). T
 - Public-role checks returned 2 published properties, 6 published media records, 10 active categories and 4 published translations.
 - A temporary draft listing was invisible to `anon` and visible to the authenticated owner; the test transaction was rolled back.
 - A rollback-only public viewing inquiry successfully created one CRM client and one viewing request; test records were rolled back.
+- Anonymous direct inserts into `viewing_requests` are blocked; public requests must enter through the inquiry workflow.
+- The authenticated owner can pass the Storage upload policy; the SQL test object was rolled back.
+- Every table in the AUREL `public` schema has RLS enabled; no permanent test clients, inquiries or viewing requests remain.
 - Owner/admin authorization helpers returned true for the existing owner account.
 - No permanent test records were left behind.
 
@@ -22,7 +25,9 @@ Configured project reference: `pllvsfbxtymoyavcjcxx` (EU West, PostgreSQL 17). T
 
 ## GitHub automated checks
 
-The original application checks passed at commit `7ecfe28ef3b3e6bc9ab5d2c214b49e3d67232e54`. The CI workflow has now been updated to apply the security/performance migration twice as well; wait for the newest run on this branch before treating the updated test suite as green.
+Latest branch commit verified: `f2cf4da457ac71939c9e8498d842cc200a26b3d5`. Both latest GitHub Actions runs passed, including application tests, TypeScript/Vite build, PostgreSQL bootstrap, both migrations applied twice, and SQL smoke tests:
+- <https://github.com/ljubmori/aurel-estate/actions/runs/45017549659>
+- <https://github.com/ljubmori/aurel-estate/actions/runs/45017544846>
 
 ## Still requires manual/live verification
 
