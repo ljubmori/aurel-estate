@@ -60,7 +60,7 @@ For an existing AUREL installation, first confirm that `supabase/schema.sql` and
 - Audit history for property, agent, inquiry, client and development-project changes
 - Agency-scoped Row Level Security (RLS), database constraints and indexes
 
-The two migrations lay down the data model and harden its database access rules. Not every new table has a finished admin screen yet. Advanced role workflows, full CRM screens, development-project management, translation editing, and media-library UI are subsequent implementation work.
+The database migrations lay down the data model and harden its access rules. The staff-management migration adds email/name metadata and membership audit history. The admin workspace includes team invitations, role/scope editing, collaborator permission toggles, activation/deactivation, password recovery and password setup for invited users. The Edge Function performs privileged invitations and membership changes server-side; the service-role key is never sent to the browser. The UI is not yet a complete production permissions console: audit-log browsing, comprehensive module-level collaborator enforcement, technical support access, and full CRM/development/translation screens still require completion and end-to-end testing.
 
 ## Login
 
