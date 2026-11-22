@@ -24,8 +24,9 @@ For a new Supabase project:
 2. Apply `supabase/schema.sql`.
 3. Apply `supabase/seed.sql` to create the AUREL demo agency and fictional listings.
 4. Apply `supabase/migrations/20261120000100_aurel_complete_database.sql`.
-5. In Supabase Authentication, create the administrator using the intended email and a strong password. Disable public sign-ups after the administrator account is created.
-6. In SQL Editor, grant that Auth user owner access:
+5. Apply `supabase/migrations/20261122000100_aurel_security_performance_hardening.sql`.
+6. In Supabase Authentication, create the administrator using the intended email and a strong password. Disable public sign-ups after the administrator account is created.
+7. In SQL Editor, grant that Auth user owner access:
 
 ```sql
 insert into public.agency_members(agency_id,user_id,role,data_scope,is_active)
@@ -59,7 +60,7 @@ For an existing AUREL installation, first confirm that `supabase/schema.sql` and
 - Audit history for property, agent, inquiry, client and development-project changes
 - Agency-scoped Row Level Security (RLS), database constraints and indexes
 
-The migration lays down the data model. Not every new table has a finished admin screen yet. Advanced role workflows, full CRM screens, development-project management, translation editing, and media-library UI are subsequent implementation work.
+The two migrations lay down the data model and harden its database access rules. Not every new table has a finished admin screen yet. Advanced role workflows, full CRM screens, development-project management, translation editing, and media-library UI are subsequent implementation work.
 
 ## Login
 
