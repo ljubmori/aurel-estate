@@ -1,29 +1,98 @@
-# AUREL Estate — Sites edition
+# AUREL Estate — Supabase edition
 
-This edition uses React, TypeScript and Vite with a Sites Worker, D1 database and R2 file storage. ChatGPT sign-in replaces Supabase passwords. The frontend also supports Supabase when configured at build time.
+AUREL uses **one application backend: Supabase**.
+- PostgreSQL is the only database.
+- Supabase Auth is the only authentication system (email + password).
+- Supabase Storage is the only file store.
+- The edge Worker serves the built static frontend only. It has no API, database or media-storage endpoints.
 
-## First use
-Open the deployed Site with the owner's ChatGPT account, then open /admin. The first owner API request initializes five fictional sample properties. The known owner's verified identity is bound once to the Site-specific user ID; server authorization uses that ID thereafter. Other users cannot edit, upload, read inquiries or confirm viewings. The Site stays owner-private by default.
+## Required configuration
 
-## Content management
-Properties → Add property → required details → images → choose Draft or Published → Save. JPEG, PNG and WebP uploads up to 10 MB are validated on the server and stored in R2. The first image is the cover; arrows reorder images. Changes persist in D1. Draft, Pending, Unpublished, Sold and Rented listings are excluded from public results. Drafts have a private content preview. Refresh public pages after saving. Delete requires confirmation. Removing an image detaches it; originals remain in storage.
+Set these variables in the frontend build environment:
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_PUBLISHABLE_KEY` (or legacy `VITE_SUPABASE_ANON_KEY`)
 
-Agents and Website settings are editable. Requests are saved as new; viewing requests are never automatically confirmed. Only the administrator can set confirmed_by_agency. No automatic email/SMS is sent. Confirm appointment and timezone directly with the visitor.
+The public/publishable key is intended for browser use and is protected by RLS. **Never put a Supabase service-role key in frontend code, a Vite variable, or Git.**
 
-## Development and deployment
-Run npm install, npm run build, npm test. For local preview run node scripts/preview.mjs and open http://127.0.0.1:5173. The localhost-only preview simulates owner identity and uses SQLite/R2-compatible local storage in ignored .local/. This is not production authentication.
+The build intentionally fails if either required Supabase setting is missing. There is no mock-data or alternate-backend fallback.
 
-Preserve .openai/hosting.json. D1 binding: DB; R2 binding: BUCKET. Schema-only migrations: drizzle/. Demo records: worker/seed.json. Publish the built Worker via Sites, using its existing project ID. Do not overwrite applied migrations. No Supabase keys are needed for this Sites edition.
+## Database setup
 
-## Implemented
-Public homepage, searchable catalog, detail pages, fullscreen gallery, about/contact, English/Serbian core interface, admin overview and property CRUD, persisted uploads/cover/reordering, agents, settings, inquiries/viewings, optional HTTPS tour links, responsive styling and reduced-motion animations. Multi-currency originals are retained; no exchange rates are invented.
+For a new Supabase project:
 
-## Remaining limitations
-Admin and some public labels remain English. Currency conversion is unavailable; filters compare original numeric amounts, as disclosed. Catalog currently filters fetched records locally; indexed fields and server pagination are recommended for growth. Uploaded photos lack automatic thumbnail generation. Gallery focus trapping and fuller accessibility testing remain. SEO is basic client metadata plus core sitemap, not complete server-rendered property Open Graph. No outgoing email, sophisticated spam protection, subscriptions, advanced roles, custom domain or custom 3D engine. Images are illustrative and properties fictional. Media files are public property photographs; do not upload confidential documents.
+1. Open the Supabase SQL Editor as the project owner.
+2. Apply `supabase/schema.sql`.
+3. Apply `supabase/seed.sql` to create the AUREL demo agency and fictional listings.
+4. Apply all six files in `supabase/migrations/` in timestamp order (`20261120000100` through `20261122000500`).
+5. In Supabase Authentication, create the first administrator using the intended email and a strong password. Disable public sign-ups after the first owner account is created.
+6. In SQL Editor, grant that Auth user owner access:
 
-## Supabase deployment
-For a new Supabase project, run supabase/schema.sql as the project owner. For a demo installation run supabase/seed.sql. For a migration, import the existing agency, properties, agents and inquiries preserving their IDs, and verify media URLs before switching production. The seed contains sample listings only.
+```sql
+insert into public.agency_members(agency_id,user_id,role,data_scope,is_active)
+values (
+  '00000000-0000-4000-8000-000000000001',
+  'AUTH_USER_UUID_HERE',
+  'owner',
+  'all',
+  true
+)
+on conflict(agency_id,user_id) do update
+set role='owner', data_scope='all', is_active=true;
+```
 
-In Supabase Auth create the administrator account. As the project owner, insert its verified Auth user ID into public.agency_members with the agency ID 00000000-0000-4000-8000-000000000001 and role admin after creating the agency row. On /admin use that account's email and password.
+Find the Auth user UUID in Supabase Authentication → Users. Do not use the email address as the user ID.
 
-Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY (or the legacy VITE_SUPABASE_ANON_KEY) in .env.local or the frontend build environment. Use only the public client key. Rebuild and deploy after setting these values. Without either value the site uses Sites storage and ChatGPT sign-in. The published GitHub source alone does not configure or migrate a Supabase project.
+For an existing AUREL installation, first confirm that `supabase/schema.sql` and `supabase/seed.sql` have already been applied to that same Supabase project. These migrations are not a standalone bootstrap for an empty or unrelated database. Take a verified backup, review the target project reference, then apply the pending migrations in timestamp order. The first adds tables and columns and migrates existing property images and English/Serbian listing copy into normalized media and translation records. The second moves privileged authorization helpers into a non-exposed schema, consolidates RLS policies and adds missing foreign-key indexes. Do not apply the demo seed to a production agency without reviewing its sample content.
+
+## Database model included in the migration
+
+- Properties, categories and separate offer types (sale, long-term rent, short-term rent, commercial lease and reservation)
+- New-build projects, buildings and individual units
+- Original prices, currencies and automatic price-change history
+- Media metadata for images, video, floor plans, 360 tours and 3D models
+- AI-generated media identification and verification notes
+- Agents, agency members, roles, permission metadata and data scopes
+- Publication approval defaults by role in `site_settings.publication_rules`; `agency_members.can_publish` optionally overrides the default for one staff member. Owners and admins can always publish. Staff without permission can save a listing as draft, but a requested publish is moved to `pending` until an authorized user publishes it.
+- Clients, inquiries and separate viewing requests
+- English/Serbian property translations and extensible language records
+- Site settings, design settings, SEO settings and translated page content
+- Audit history for property, agent, inquiry, client and development-project changes
+- Agency-scoped Row Level Security (RLS), database constraints and indexes
+
+The database migrations lay down the data model and harden its access rules. The staff-management migration adds email/name metadata and membership audit history. The admin workspace includes team invitations, role/scope editing, collaborator permission toggles, activation/deactivation, password recovery and password setup for invited users. The Edge Function performs privileged invitations and membership changes server-side; the service-role key is never sent to the browser. The UI is not yet a complete production permissions console: audit-log browsing, comprehensive module-level collaborator enforcement, technical support access, and full CRM/development/translation screens still require completion and end-to-end testing.
+
+## Login and team access
+
+Open `/admin` and sign in with the Supabase Auth email and password. There is no ChatGPT sign-in path and no public registration. An account must have an active agency membership. Owners can invite admins, agents and limited collaborators from Team & permissions. Deploy the Edge Function with `supabase functions deploy agency-user-management`, then set `APP_URL` to the deployed site origin using `supabase secrets set APP_URL=https://your-domain.example`. In Authentication → URL Configuration, allowlist the deployed `/account/recovery` URL. Configure the invite and reset-password email templates to send verified users to that route. Use a production SMTP provider before relying on email delivery.
+
+## Storage
+
+The `property-media` bucket is public because the current listing gallery uses public image URLs. Anyone who obtains an object URL can read that file, including a file uploaded for a draft listing. Only authorized agency administrators can upload, update or delete objects through the configured Storage policies. Use this bucket only for public-facing listing photos, videos and floor plans. Never upload identity documents, contracts, private client files, unpublished marketing material that must remain confidential, or any other sensitive content. A separate private bucket with signed URLs and stricter policies is required before confidential media is supported.
+
+## Build and tests
+
+```sh
+npm install
+npm run build
+npm test
+```
+
+GitHub Actions additionally starts a clean PostgreSQL 16 instance, applies the base schema and demo seed, applies all migrations twice to check rerun safety, then exercises public RLS, owner/agent access, inquiry-to-CRM linking, viewing-request creation, price history, publication approval, Storage write permissions and last-owner protection.
+
+The edge Worker is only a static asset handler for the frontend. It does not accept API writes and has no D1 or R2 dependency. All application data requests go directly to Supabase under RLS.
+
+## Important operational work still required
+
+- Verify invitation acceptance and password reset end-to-end using the production SMTP provider and allowlisted redirect URL.
+- Enable leaked-password protection in Supabase Authentication password security settings; the current Auth advisor reports it is disabled.
+- Verify the real email/password sign-in flow from `/admin`.
+- Set up automated database backups and test a restore.
+- Configure production monitoring and error reporting.
+- Add database integration tests for anonymous, non-admin and owner/admin RLS behavior.
+- Complete the separate technical-support access workflow; developers must not be agency members or owners.
+- Finish full CRM, development-project, translation, SEO and audit-log admin screens, plus end-to-end tests for all collaborator permissions.
+- Add server-side abuse controls for public inquiry submission.
+- Add a private storage bucket and separate policies before storing confidential documents.
+- Confirm the agency timezone and visitor timezone handling before using viewing requests operationally.
+
+All AUREL sample properties are fictional demonstration content.
