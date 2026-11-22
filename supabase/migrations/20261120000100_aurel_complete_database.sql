@@ -750,4 +750,85 @@ create policy media_insert on storage.objects for insert to authenticated with c
 create policy media_update on storage.objects for update to authenticated using(bucket_id='property-media' and public.is_agency_admin(((storage.foldername(name))[1])::uuid)) with check(bucket_id='property-media' and public.is_agency_admin(((storage.foldername(name))[1])::uuid));
 create policy media_delete on storage.objects for delete to authenticated using(bucket_id='property-media' and public.is_agency_admin(((storage.foldername(name))[1])::uuid));
 
+
+-- Bootstrap the only existing active member as the initial owner when the agency
+-- has exactly one active membership and no owner. Ambiguous teams require manual assignment.
+do $
+declare active_count integer; owner_count integer;
+begin
+  select count(*) into active_count from public.agency_members where is_active;
+  select count(*) into owner_count from public.agency_members where is_active and role='owner';
+  if owner_count=0 and active_count=1 then
+    update public.agency_members set role='owner',data_scope='all'
+    where is_active and role='admin';
+  end if;
+end $;
+
+-- Security-definer helpers must not become unrestricted RPC endpoints.
+-- is_agency_admin remains callable by anon because public catalog RLS policies
+-- use it; it returns false without a signed-in user and only reveals that user's
+-- own membership role.
+create or replace function public.is_agency_admin(a uuid)
+returns boolean language sql stable security definer
+set search_path=pg_catalog,public,auth
+as $
+  select auth.uid() is not null
+     and public.has_agency_role(a,array['owner','admin']::text[])
+$;
+revoke all on function public.is_agency_admin(uuid) from public;
+grant execute on function public.is_agency_admin(uuid) to anon,authenticated;
+
+revoke all on function public.has_agency_role(uuid,text[]) from public,anon;
+grant execute on function public.has_agency_role(uuid,text[]) to authenticated;
+revoke all on function public.is_agency_owner(uuid) from public,anon;
+grant execute on function public.is_agency_owner(uuid) to authenticated;
+revoke all on function public.can_manage_property(uuid,uuid,uuid) from public,anon;
+grant execute on function public.can_manage_property(uuid,uuid,uuid) to authenticated;
+revoke all on function public.can_publish_property(uuid) from public,anon;
+grant execute on function public.can_publish_property(uuid) to authenticated;
+
+-- These functions are invoked only by database triggers, never through PostgREST RPC.
+revoke all on function public.prevent_last_agency_owner_removal() from public,anon,authenticated;
+revoke all on function public.protect_property_assignment() from public,anon,authenticated;
+revoke all on function public.prepare_property_write() from public,anon,authenticated;
+revoke all on function public.record_property_price_change() from public,anon,authenticated;
+revoke all on function public.sync_property_media_from_gallery() from public,anon,authenticated;
+revoke all on function public.link_inquiry_to_client() from public,anon,authenticated;
+revoke all on function public.sync_viewing_request_from_inquiry() from public,anon,authenticated;
+revoke all on function public.enforce_property_publication_approval() from public,anon,authenticated;
+revoke all on function public.write_audit_log() from public,anon,authenticated;
+revoke all on function public.write_membership_audit_log() from public,anon,authenticated;
+
+-- Do not expose the Supabase-managed RLS auto-enable event trigger as an RPC.
+do $
+begin
+  if to_regprocedure('public.rls_auto_enable()') is not null then
+    revoke all on function public.rls_auto_enable() from public,anon,authenticated;
+  end if;
+end $;
+
+-- Public visitors submit viewing requests through inquiries; the trigger creates
+-- the linked viewing_requests row. Do not permit unauthenticated direct inserts.
+drop policy if exists viewing_public_insert on public.viewing_requests;
+revoke insert on public.viewing_requests from anon;
+
+-- Complete foreign-key indexes identified by the database performance advisor.
+create index if not exists agency_members_user_id_idx on public.agency_members(user_id);
+create index if not exists agents_agency_id_idx on public.agents(agency_id);
+create index if not exists inquiries_property_agency_idx on public.inquiries(property_id,agency_id);
+create index if not exists properties_agent_agency_idx on public.properties(agent_id,agency_id);
+
+-- An agent may update an inquiry only while it remains assigned to that agent
+-- and within the same agency.
+drop policy if exists inquiries_staff_update on public.inquiries;
+create policy inquiries_staff_update on public.inquiries for update to authenticated
+  using(assigned_to=(select auth.uid()) and public.has_agency_role(agency_id,array['agent']))
+  with check(assigned_to=(select auth.uid()) and public.has_agency_role(agency_id,array['agent']));
+
+-- Avoid per-row auth.uid() evaluation in the existing self-membership policy.
+drop policy if exists membership_read on public.agency_members;
+create policy membership_read on public.agency_members for select to authenticated
+  using(user_id=(select auth.uid()));
+
+
 commit;
