@@ -3,6 +3,7 @@
 -- manually attributed; direct authenticated writes must be audited by the trigger.
 begin;
 drop trigger if exists audit_agency_membership_change on public.agency_members;
+drop trigger if exists audit_agency_members on public.agency_members;
 drop trigger if exists aurel_membership_audit_log on public.agency_members;
 create trigger aurel_membership_audit_log
 after insert or update or delete on public.agency_members
