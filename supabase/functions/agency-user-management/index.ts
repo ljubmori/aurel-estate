@@ -6,6 +6,22 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+const PERMISSIONS = ["properties_read","properties_write","properties_delete","properties_publish","inquiries_read","inquiries_write","clients_read","clients_write","media_write","content_write","seo_write"] as const;
+const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
+  owner: PERMISSIONS,
+  admin: PERMISSIONS.filter(p => p !== "properties_delete"),
+  agent: ["properties_read","properties_write","properties_publish","inquiries_read","inquiries_write","clients_read","clients_write","media_write"],
+  collaborator: ["properties_read","properties_write","properties_delete","inquiries_read","inquiries_write","clients_read","clients_write","media_write","content_write","seo_write"],
+};
+function sanitizePermissions(role: string, input: unknown): Record<string, boolean> {
+  const raw = input && typeof input === "object" && !Array.isArray(input) ? input as Record<string, unknown> : {};
+  const allowed = new Set(ROLE_PERMISSIONS[role] ?? []);
+  return Object.fromEntries(PERMISSIONS.map(key => [key, allowed.has(key) && raw[key] === true]));
+}
+function validScope(role: string, scope: string) {
+  return ["own","assigned","all"].includes(scope) && (role === "owner" || role === "admin" || scope !== "all");
+}
+
 function reply(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -96,17 +112,11 @@ Deno.serve(async (req: Request) => {
     const allowedRoles = ["admin", "agent", "collaborator"];
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return reply({ error: "Enter a valid email address" }, 400);
     if (!allowedRoles.includes(role)) return reply({ error: "Invalid role" }, 400);
-    if (!["own", "assigned", "all"].includes(dataScope)) return reply({ error: "Invalid data scope" }, 400);
+    if (!validScope(role, dataScope)) return reply({ error: "Invalid data scope for role" }, 400);
 
     const permissionsInput = body.permissions && typeof body.permissions === "object"
       ? body.permissions as Record<string, unknown> : {};
-    const permissionKeys = [
-      "properties_read", "properties_write", "properties_delete", "properties_publish",
-      "inquiries_read", "inquiries_write", "clients_read", "clients_write",
-      "media_write", "content_write", "seo_write",
-    ];
-    const permissions: Record<string, boolean> = {};
-    for (const key of permissionKeys) permissions[key] = permissionsInput[key] === true;
+    const permissions = sanitizePermissions(role, permissionsInput);
 
     const appUrl = Deno.env.get("APP_URL");
     const inviteOptions: Record<string, unknown> = {
@@ -131,8 +141,9 @@ Deno.serve(async (req: Request) => {
     });
 
     if (insertError) {
-      await admin.auth.admin.deleteUser(invited.user.id);
-      return reply({ error: insertError.message }, 400);
+      // An invitation may reuse an existing Auth user. Never delete that account on a failed membership write.
+      console.error("Invitation membership insert failed", insertError.message);
+      return reply({ error: "Invitation could not be linked to this agency. Check membership or existing account." }, 409);
     }
     await writeAudit("invite", invited.user.id, null, { email, display_name: displayName, role, data_scope: dataScope, permissions, can_publish: canPublish });
     return reply({ success: true, user_id: invited.user.id });
@@ -159,19 +170,31 @@ Deno.serve(async (req: Request) => {
     }
     if (body.data_scope !== undefined) {
       const scope = String(body.data_scope);
-      if (!["own", "assigned", "all"].includes(scope)) return reply({ error: "Invalid data scope" }, 400);
+      if (!validScope(String(patch.role ?? target.role), scope)) return reply({ error: "Invalid data scope for role" }, 400);
       patch.data_scope = scope;
     }
     if (body.permissions !== undefined) {
       if (!body.permissions || typeof body.permissions !== "object") return reply({ error: "Invalid permissions" }, 400);
       const input = body.permissions as Record<string, unknown>;
       const keys = ["properties_read","properties_write","properties_delete","properties_publish","inquiries_read","inquiries_write","clients_read","clients_write","media_write","content_write","seo_write"];
-      patch.permissions = Object.fromEntries(keys.map(key => [key, input[key] === true]));
+      patch.permissions = sanitizePermissions(String(patch.role ?? target.role), input);
     }
     if (body.can_publish !== undefined) patch.can_publish = Boolean(body.can_publish);
     if (body.is_active !== undefined) {
       if (targetUserId === callerData.user.id && body.is_active === false) return reply({ error: "You cannot deactivate your own owner account" }, 400);
       patch.is_active = Boolean(body.is_active);
+    }
+    // Role transitions must not retain privileges that the new role cannot hold.
+    const effectiveRole = String(patch.role ?? target.role);
+    const effectiveScope = String(patch.data_scope ?? target.data_scope);
+    if (!validScope(effectiveRole, effectiveScope)) {
+      patch.data_scope = effectiveRole === "owner" || effectiveRole === "admin" ? "all" : "assigned";
+    }
+    if (patch.role !== undefined && patch.permissions === undefined) {
+      patch.permissions = sanitizePermissions(effectiveRole, target.permissions);
+    }
+    if (effectiveRole === "agent" && patch.can_publish === undefined) {
+      patch.can_publish = Boolean(target.can_publish);
     }
     if (Object.keys(patch).length === 0) return reply({ error: "No supported changes supplied" }, 400);
     const { error } = await admin.from("agency_members").update(patch)
