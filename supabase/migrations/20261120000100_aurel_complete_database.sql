@@ -753,7 +753,7 @@ create policy media_delete on storage.objects for delete to authenticated using(
 
 -- Bootstrap the only existing active member as the initial owner when the agency
 -- has exactly one active membership and no owner. Ambiguous teams require manual assignment.
-do $
+do $$
 declare active_count integer; owner_count integer;
 begin
   select count(*) into active_count from public.agency_members where is_active;
@@ -762,7 +762,7 @@ begin
     update public.agency_members set role='owner',data_scope='all'
     where is_active and role='admin';
   end if;
-end $;
+end $$;
 
 -- Security-definer helpers must not become unrestricted RPC endpoints.
 -- is_agency_admin remains callable by anon because public catalog RLS policies
@@ -771,10 +771,10 @@ end $;
 create or replace function public.is_agency_admin(a uuid)
 returns boolean language sql stable security definer
 set search_path=pg_catalog,public,auth
-as $
+as $$
   select auth.uid() is not null
      and public.has_agency_role(a,array['owner','admin']::text[])
-$;
+$$;
 revoke all on function public.is_agency_admin(uuid) from public;
 grant execute on function public.is_agency_admin(uuid) to anon,authenticated;
 
@@ -800,12 +800,12 @@ revoke all on function public.write_audit_log() from public,anon,authenticated;
 revoke all on function public.write_membership_audit_log() from public,anon,authenticated;
 
 -- Do not expose the Supabase-managed RLS auto-enable event trigger as an RPC.
-do $
+do $$
 begin
   if to_regprocedure('public.rls_auto_enable()') is not null then
     revoke all on function public.rls_auto_enable() from public,anon,authenticated;
   end if;
-end $;
+end $$;
 
 -- Public visitors submit viewing requests through inquiries; the trigger creates
 -- the linked viewing_requests row. Do not permit unauthenticated direct inserts.
