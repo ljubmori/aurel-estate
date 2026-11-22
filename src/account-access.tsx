@@ -51,6 +51,8 @@ export function PasswordRecovery() {
       setMessage(error.message);
       return;
     }
+    const { error: acceptError } = await supabase.functions.invoke('agency-user-management', { body: { agency_id: '00000000-0000-4000-8000-000000000001', action: 'accept_invitation' } });
+    if (acceptError) setMessage('Password updated, but the invitation status could not be refreshed. Contact the agency owner if access is not available.');
     await supabase.auth.signOut();
     setBusy(false);
     setDone(true);
