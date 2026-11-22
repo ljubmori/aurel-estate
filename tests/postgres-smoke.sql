@@ -200,4 +200,41 @@ do $$ begin
   end;
 end $$;
 
+-- Check a non-member is denied, then verify admin can read private drafts.
+insert into public.agency_members(agency_id,user_id,role,data_scope,is_active,permissions)
+values ('00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000003','admin','all',true,'{}');
+set role authenticated;
+set request.jwt.claim.sub='10000000-0000-4000-8000-000000000003';
+do $ begin
+  if not exists(select 1 from public.properties where slug='owner-only-property') then
+    raise exception 'Administrator cannot read an agency private draft';
+  end if;
+end $;
+reset role;
+
+-- Deactivating a member must immediately remove access to private records.
+update public.agency_members set is_active=false
+where user_id='10000000-0000-4000-8000-000000000002';
+set role authenticated;
+set request.jwt.claim.sub='10000000-0000-4000-8000-000000000002';
+do $ begin
+  if exists(select 1 from public.properties where slug='agent-test-property') then
+    raise exception 'Deactivated agent can still read a private draft';
+  end if;
+end $;
+reset role;
+update public.agency_members set is_active=true
+where user_id='10000000-0000-4000-8000-000000000002';
+
+-- Collaborators may not modify another agent's private listing outside their scope.
+set role authenticated;
+set request.jwt.claim.sub='10000000-0000-4000-8000-000000000004';
+update public.properties set price=987654 where slug='agent-test-property';
+reset role;
+do $ begin
+  if (select price from public.properties where slug='agent-test-property') <> 105000 then
+    raise exception 'Collaborator edited an out-of-scope property';
+  end if;
+end $;
+
 select 'AUREL database smoke tests passed' as result;
