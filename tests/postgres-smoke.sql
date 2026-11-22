@@ -14,13 +14,17 @@ insert into auth.users(id) values
  ('10000000-0000-4000-8000-000000000002'),
  ('10000000-0000-4000-8000-000000000003'),
  ('10000000-0000-4000-8000-000000000004');
+set request.jwt.claim.sub='10000000-0000-4000-8000-000000000001';
 insert into public.agency_members(agency_id,user_id,role,data_scope,is_active)
 values
  ('00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','owner','all',true),
  ('00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002','agent','own',true),
  ('00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000004','collaborator','assigned',true);
+update public.agency_members set permissions='{"properties_read":true,"properties_write":true,"properties_delete":false}'::jsonb
+where user_id='10000000-0000-4000-8000-000000000004';
+reset request.jwt.claim.sub;
 
-do $$ begin
+do $ begin
   if not exists(select 1 from public.audit_logs where entity_type='agency_members' and entity_id='10000000-0000-4000-8000-000000000002') then
     raise exception 'Agency membership changes are not recorded in audit history';
   end if;
