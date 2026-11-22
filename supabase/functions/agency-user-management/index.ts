@@ -74,6 +74,19 @@ Deno.serve(async (req: Request) => {
     return reply({ error: "Only an active agency owner can manage team accounts" }, 403);
   }
 
+  const writeAudit = async (event: string, userId: string, oldValues: unknown, newValues: unknown) => {
+    const { error } = await admin.from("audit_logs").insert({
+      agency_id: agencyId,
+      actor_user_id: callerData.user.id,
+      action: event,
+      entity_type: "agency_members",
+      entity_id: userId,
+      old_values: oldValues ?? null,
+      new_values: newValues ?? null,
+    });
+    if (error) console.error("Membership audit insert failed", error.message);
+  };
+
   if (action === "invite") {
     const email = String(body.email ?? "").trim().toLowerCase();
     const role = String(body.role ?? "agent");
@@ -121,6 +134,7 @@ Deno.serve(async (req: Request) => {
       await admin.auth.admin.deleteUser(invited.user.id);
       return reply({ error: insertError.message }, 400);
     }
+    await writeAudit("invite", invited.user.id, null, { email, display_name: displayName, role, data_scope: dataScope, permissions, can_publish: canPublish });
     return reply({ success: true, user_id: invited.user.id });
   }
 
@@ -130,7 +144,7 @@ Deno.serve(async (req: Request) => {
 
   const { data: target, error: targetError } = await admin
     .from("agency_members")
-    .select("user_id,role,is_active")
+    .select("user_id,role,is_active,data_scope,permissions,can_publish,email,display_name")
     .eq("agency_id", agencyId)
     .eq("user_id", targetUserId)
     .maybeSingle();
@@ -163,6 +177,7 @@ Deno.serve(async (req: Request) => {
     const { error } = await admin.from("agency_members").update(patch)
       .eq("agency_id", agencyId).eq("user_id", targetUserId);
     if (error) return reply({ error: error.message }, 400);
+    await writeAudit("permissions_updated", targetUserId, target, patch);
     return reply({ success: true });
   }
 
@@ -171,6 +186,7 @@ Deno.serve(async (req: Request) => {
       .update({ is_active: action === "reactivate" })
       .eq("agency_id", agencyId).eq("user_id", targetUserId);
     if (error) return reply({ error: error.message }, 400);
+    await writeAudit(action === "deactivate" ? "deactivated" : "reactivated", targetUserId, target, { is_active: action === "reactivate" });
     return reply({ success: true });
   }
 
