@@ -23,10 +23,9 @@ For a new Supabase project:
 1. Open the Supabase SQL Editor as the project owner.
 2. Apply `supabase/schema.sql`.
 3. Apply `supabase/seed.sql` to create the AUREL demo agency and fictional listings.
-4. Apply `supabase/migrations/20261120000100_aurel_complete_database.sql`.
-5. Apply `supabase/migrations/20261122000100_aurel_security_performance_hardening.sql`.
-6. In Supabase Authentication, create the administrator using the intended email and a strong password. Disable public sign-ups after the administrator account is created.
-7. In SQL Editor, grant that Auth user owner access:
+4. Apply all five files in `supabase/migrations/` in timestamp order (`20261120000100` through `20261122000400`).
+5. In Supabase Authentication, create the first administrator using the intended email and a strong password. Disable public sign-ups after the first owner account is created.
+6. In SQL Editor, grant that Auth user owner access:
 
 ```sql
 insert into public.agency_members(agency_id,user_id,role,data_scope,is_active)
@@ -62,9 +61,9 @@ For an existing AUREL installation, first confirm that `supabase/schema.sql` and
 
 The database migrations lay down the data model and harden its access rules. The staff-management migration adds email/name metadata and membership audit history. The admin workspace includes team invitations, role/scope editing, collaborator permission toggles, activation/deactivation, password recovery and password setup for invited users. The Edge Function performs privileged invitations and membership changes server-side; the service-role key is never sent to the browser. The UI is not yet a complete production permissions console: audit-log browsing, comprehensive module-level collaborator enforcement, technical support access, and full CRM/development/translation screens still require completion and end-to-end testing.
 
-## Login
+## Login and team access
 
-Open `/admin` and sign in with the Supabase Auth email and password. There is no ChatGPT sign-in path and no public administrator registration. The account must have an active `owner` or `admin` membership for this agency.
+Open `/admin` and sign in with the Supabase Auth email and password. There is no ChatGPT sign-in path and no public registration. An account must have an active agency membership. Owners can invite admins, agents and limited collaborators from Team & permissions. Deploy the Edge Function with `supabase functions deploy agency-user-management`, then set `APP_URL` to the deployed site origin using `supabase secrets set APP_URL=https://your-domain.example`. In Authentication → URL Configuration, allowlist the deployed `/account/recovery` URL. Configure the invite and reset-password email templates to send verified users to that route. Use a production SMTP provider before relying on email delivery.
 
 ## Storage
 
@@ -84,13 +83,14 @@ The edge Worker is only a static asset handler for the frontend. It does not acc
 
 ## Important operational work still required
 
-- Configure Supabase Auth email templates and redirect URLs for the deployed domain.
+- Verify invitation acceptance and password reset end-to-end using the production SMTP provider and allowlisted redirect URL.
 - Enable leaked-password protection in Supabase Authentication password security settings; the current Auth advisor reports it is disabled.
-- Verify the real email/password sign-in flow from `/admin` after confirming the deployed redirect URLs.
+- Verify the real email/password sign-in flow from `/admin`.
 - Set up automated database backups and test a restore.
 - Configure production monitoring and error reporting.
 - Add database integration tests for anonymous, non-admin and owner/admin RLS behavior.
-- Implement the admin UI for staff invitations, granular permissions, clients/CRM, developments/units, translation management, SEO and audit-log review.
+- Complete the separate technical-support access workflow; developers must not be agency members or owners.
+- Finish full CRM, development-project, translation, SEO and audit-log admin screens, plus end-to-end tests for all collaborator permissions.
 - Add server-side abuse controls for public inquiry submission.
 - Add a private storage bucket and separate policies before storing confidential documents.
 - Confirm the agency timezone and visitor timezone handling before using viewing requests operationally.
