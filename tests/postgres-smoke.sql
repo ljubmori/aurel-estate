@@ -12,17 +12,27 @@ end $$;
 insert into auth.users(id) values
  ('10000000-0000-4000-8000-000000000001'),
  ('10000000-0000-4000-8000-000000000002'),
- ('10000000-0000-4000-8000-000000000003');
+ ('10000000-0000-4000-8000-000000000003'),
+ ('10000000-0000-4000-8000-000000000004');
 insert into public.agency_members(agency_id,user_id,role,data_scope,is_active)
 values
  ('00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','owner','all',true),
- ('00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002','agent','own',true);
+ ('00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002','agent','own',true),
+ ('00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000004','collaborator','assigned',true);
 
 do $$ begin
   if not exists(select 1 from public.audit_logs where entity_type='agency_members' and entity_id='10000000-0000-4000-8000-000000000002') then
     raise exception 'Agency membership changes are not recorded in audit history';
   end if;
 end $$;
+
+-- Owner creates a listing that belongs to the owner, not the agent.
+set role authenticated;
+set request.jwt.claim.sub='10000000-0000-4000-8000-000000000001';
+insert into public.properties(agency_id,title,slug,type,transaction,status,country,city,price,currency,area)
+values ('00000000-0000-4000-8000-000000000001','Owner-only property','owner-only-property',
+ 'Apartment','sale','draft','Serbia','Novi Sad',250000,'EUR',90);
+reset role;
 
 -- An anonymous visitor can see published properties, but not drafts.
 set role anon;
@@ -105,6 +115,40 @@ do $$ begin
     raise exception 'Initial and changed prices were not both recorded';
   end if;
 end $$;
+
+-- Agents cannot modify or delete another user's listing, and cannot delete their own.
+set role authenticated;
+set request.jwt.claim.sub='10000000-0000-4000-8000-000000000002';
+update public.properties set price=999999 where slug='owner-only-property';
+delete from public.properties where slug='agent-test-property';
+reset role;
+do $ begin
+  if (select price from public.properties where slug='owner-only-property') <> 250000 then
+    raise exception 'Agent changed a listing owned by another user';
+  end if;
+  if not exists(select 1 from public.properties where slug='agent-test-property') then
+    raise exception 'Agent unexpectedly deleted their own listing';
+  end if;
+end $;
+
+-- A collaborator with explicit properties_write can edit assigned/own records, but not delete without properties_delete.
+set role authenticated;
+set request.jwt.claim.sub='10000000-0000-4000-8000-000000000004';
+insert into public.properties(agency_id,title,slug,type,transaction,status,country,city,price,currency,area)
+values ('00000000-0000-4000-8000-000000000001','Collaborator property','collaborator-property',
+ 'Apartment','sale','draft','Serbia','Novi Sad',125000,'EUR',55)
+returning id as collaborator_property_id \gset
+update public.properties set price=130000 where id=:'collaborator_property_id';
+delete from public.properties where id=:'collaborator_property_id';
+reset role;
+do $ begin
+  if (select price from public.properties where slug='collaborator-property') <> 130000 then
+    raise exception 'Collaborator with write permission could not edit own listing';
+  end if;
+  if not exists(select 1 from public.properties where slug='collaborator-property') then
+    raise exception 'Collaborator deleted a listing without delete permission';
+  end if;
+end $;
 
 -- Owner can upload public listing media; agents cannot upload to Storage.
 set role authenticated;
