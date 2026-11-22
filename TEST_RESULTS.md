@@ -1,41 +1,39 @@
 # Verification status
 
-## Latest verified branch
+## Live AUREL Supabase project
 
-Branch: `feature/supabase-single-backend`
+Configured project reference: `pllvsfbxtymoyavcjcxx` (EU West, PostgreSQL 17). The repository's `.env.production` points to this same project. The separate personal Supabase project was not changed.
 
-Commit: `7ecfe28ef3b3e6bc9ab5d2c214b49e3d67232e54`
+- Both database migrations were applied successfully and are recorded in Supabase migration history.
+- The existing agency and two fictional published properties were preserved.
+- The existing confirmed Auth user was retained and its sole active agency membership was safely promoted from admin to owner.
+- Database now contains 10 property categories, 2 properties, 2 initial price-history rows, 6 media metadata records and 4 English/Serbian translations.
+- Public-role checks returned 2 published properties, 6 published media records, 10 active categories and 4 published translations.
+- A temporary draft listing was invisible to `anon` and visible to the authenticated owner; the test transaction was rolled back.
+- A rollback-only public viewing inquiry successfully created one CRM client and one viewing request; test records were rolled back.
+- Owner/admin authorization helpers returned true for the existing owner account.
+- No permanent test records were left behind.
 
-GitHub Actions: <https://github.com/ljubmori/aurel-estate/actions/runs/44796616290>
+## Supabase advisors after hardening
 
-**All automated checks passed.**
+- Security: no database function/RLS findings remain. One Auth setting still needs manual attention: leaked-password protection is disabled.
+- Performance: no missing foreign-key-index, RLS init-plan, or multiple-permissive-policy findings remain. Remaining notices are unused-index INFO notices on a database with very little traffic; review them after real usage rather than deleting indexes prematurely.
+- Health: no findings.
 
-- `npm ci`: passed.
-- `npm test`: passed (10 Node tests).
-- `npm run build`: passed (TypeScript, Vite and static Worker packaging).
-- PostgreSQL 16 test database bootstrapped with Supabase-compatible `auth` and `storage` schemas.
-- Base schema and demo seed applied.
-- Complete AUREL migration applied twice successfully to verify rerun safety.
-- SQL smoke tests passed for:
-  - anonymous visitors can read published properties but not drafts
-  - agent membership, creator attribution, agency-wide listing read and own-listing edit
-  - non-members cannot read draft properties
-  - price history records the initial price and later price changes
-  - public inquiry creates/links a CRM client
-  - viewing inquiry creates a dedicated viewing request
-  - owner can upload media and an agent without upload rights is blocked
-  - publication approval defaults and role-level publishing override
-  - an agent can edit an already-published listing without accidentally unpublishing it
-  - agency membership changes are written to the audit log
-  - the last active owner cannot be deactivated or removed
+## GitHub automated checks
 
-## Still requires the real Supabase project
+The original application checks passed at commit `7ecfe28ef3b3e6bc9ab5d2c214b49e3d67232e54`. The CI workflow has now been updated to apply the security/performance migration twice as well; wait for the newest run on this branch before treating the updated test suite as green.
 
-These checks ran against a clean PostgreSQL 16 test database that mimics the Supabase Auth and Storage schemas. They do **not** prove that the configured Supabase project has been migrated or that its live services work.
+## Still requires manual/live verification
 
-- The migration has not been applied to the actual Supabase project.
-- Real Supabase Auth email/password sign-in and administrator provisioning have not been exercised.
-- Real Storage object uploads/downloads have not been tested against Supabase.
-- Production deployment and domain redirect settings have not been verified.
+- Enable leaked-password protection in Supabase Authentication password security settings.
+- Sign in through the deployed `/admin` page with the owner's email and password. The existing Auth user is confirmed, and the code uses `signInWithPassword`, but the actual password was not tested or accessed here.
+- Test an actual image upload from the admin UI; SQL policy checks and metadata synchronization do not prove browser upload works end-to-end.
+- Configure and verify production Auth redirect URLs, email templates, backups and restore.
+- The full CRM, development-project, staff-invitation, translation, SEO and audit-log admin screens are not all implemented yet; database tables alone do not make those user interfaces complete.
 
-Do not mark AUREL production-ready until the actual Supabase project is connected, the migration is applied to the intended project, and live authentication, RLS, CRUD, inquiry, viewing-request and media-upload flows are verified.
+## Unrelated Supabase project
+
+The separate project named `ljubomir993@gmail.com's Project` contains `public.n8n_chat_histories` with RLS disabled. It is not AUREL's configured database and was not modified. Review and secure that table separately before using it with client-facing keys.
+
+AUREL is not marked production-ready until the remaining manual/live checks above are completed.
