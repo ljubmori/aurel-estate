@@ -25,7 +25,7 @@ where user_id='10000000-0000-4000-8000-000000000004';
 reset request.jwt.claim.sub;
 
 do $ begin
-  if not exists(select 1 from public.audit_logs where entity_type='agency_members' and entity_id='10000000-0000-4000-8000-000000000002') then
+  if not exists(select 1 from public.audit_logs where entity_type='agency_member' and entity_id='10000000-0000-4000-8000-000000000002') then
     raise exception 'Agency membership changes are not recorded in audit history';
   end if;
 end $$;
