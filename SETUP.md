@@ -42,7 +42,7 @@ set role='owner', data_scope='all', is_active=true;
 
 Find the Auth user UUID in Supabase Authentication → Users. Do not use the email address as the user ID.
 
-For an existing AUREL installation, first confirm that `supabase/schema.sql` and `supabase/seed.sql` have already been applied to that same Supabase project. This migration is not a standalone bootstrap for an empty or unrelated database. Take a verified backup, review the target project reference, then apply the migration. It adds tables and columns and migrates existing property images and English/Serbian listing copy into normalized media and translation records. Do not apply the demo seed to a production agency without reviewing its sample content.
+For an existing AUREL installation, first confirm that `supabase/schema.sql` and `supabase/seed.sql` have already been applied to that same Supabase project. These migrations are not a standalone bootstrap for an empty or unrelated database. Take a verified backup, review the target project reference, then apply both migrations in timestamp order. The first adds tables and columns and migrates existing property images and English/Serbian listing copy into normalized media and translation records. The second moves privileged authorization helpers into a non-exposed schema, consolidates RLS policies and adds missing foreign-key indexes. Do not apply the demo seed to a production agency without reviewing its sample content.
 
 ## Database model included in the migration
 
@@ -77,13 +77,15 @@ npm run build
 npm test
 ```
 
-GitHub Actions additionally starts a clean PostgreSQL 16 instance, applies the base schema, demo seed and complete migration, applies the migration a second time to check rerun safety, then exercises public RLS, owner/agent access, inquiry-to-CRM linking, viewing-request creation, price history and last-owner protection.
+GitHub Actions additionally starts a clean PostgreSQL 16 instance, applies the base schema and demo seed, applies both migrations twice to check rerun safety, then exercises public RLS, owner/agent access, inquiry-to-CRM linking, viewing-request creation, price history, publication approval, Storage write permissions and last-owner protection.
 
 The edge Worker is only a static asset handler for the frontend. It does not accept API writes and has no D1 or R2 dependency. All application data requests go directly to Supabase under RLS.
 
 ## Important operational work still required
 
 - Configure Supabase Auth email templates and redirect URLs for the deployed domain.
+- Enable leaked-password protection in Supabase Authentication password security settings; the current Auth advisor reports it is disabled.
+- Verify the real email/password sign-in flow from `/admin` after confirming the deployed redirect URLs.
 - Set up automated database backups and test a restore.
 - Configure production monitoring and error reporting.
 - Add database integration tests for anonymous, non-admin and owner/admin RLS behavior.
