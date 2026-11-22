@@ -7,11 +7,13 @@ const corsHeaders = {
 };
 
 const PERMISSIONS = ["properties_read","properties_write","properties_delete","properties_publish","inquiries_read","inquiries_write","clients_read","clients_write","media_write","content_write","seo_write"] as const;
+// Agency owners/admins and agents have predefined RLS roles; only supported
+// collaborator overrides are configurable until corresponding RLS exists.
 const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
-  owner: PERMISSIONS,
-  admin: PERMISSIONS.filter(p => p !== "properties_delete"),
-  agent: ["properties_read","properties_write","properties_publish","inquiries_read","inquiries_write","clients_read","clients_write","media_write"],
-  collaborator: ["properties_read","properties_write","properties_delete","inquiries_read","inquiries_write","clients_read","clients_write","media_write","content_write","seo_write"],
+  owner: [],
+  admin: [],
+  agent: [],
+  collaborator: ["properties_read","properties_write","properties_delete","inquiries_read","inquiries_write"],
 };
 function sanitizePermissions(role: string, input: unknown): Record<string, boolean> {
   const raw = input && typeof input === "object" && !Array.isArray(input) ? input as Record<string, unknown> : {};
